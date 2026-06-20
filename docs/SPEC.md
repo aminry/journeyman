@@ -159,6 +159,7 @@ The seed is exactly the set of things that cannot bootstrap themselves, plus com
 - Event bus + trace log + cost accounting
 - Budget ledger + hard cost ceiling + cost-per-task viability gate
 - Human approval queue (routed by task class)
+- Assurance artifacts: Phase -1 protocol, tool policy, approval policy, untrusted-content pipeline, memory-admission policy, eval governance, trace schema, redaction/retention policy, and coding-effector sandbox contract (Section 24)
 - Dream / consolidation / distillation job — conservative, hand-written (Section 7)
 - Regression guard + rotating eval harness (Section 6)
 - **Project scaffolder + Definition-of-Done gate + code-graph indexer** (Section 11)
@@ -198,9 +199,9 @@ stateDiagram-v2
 - **Budget ledger + hard cost ceiling.** A daily/weekly spend ceiling halts the system regardless of progress. Real money is the real-world "energy."
 - **Cost-per-task viability gate.** Standing rule: if cost-per-completed-task isn't trending down (while quality holds) by week N, halt and escalate. The production version of the Phase −1 test, running forever.
 - **Milestone gating + revenue faucet.** Verified milestones or real revenue unlock more budget.
-- **Human approval queue (by task class).** Irreversible/paid/publishing/novel actions queue with full context.
+- **Human approval queue (by task class).** Irreversible/paid/publishing/novel actions queue with full context. Approval is bound to the exact actor, tool, target resource, normalized parameters, expiry, and policy version; execution fails closed if approval lookup, replay protection, or audit logging fails.
 - **Regression guard + rotating eval harness.** The single most important safety mechanism. It is **not a small fixed set**: it is rotating, partly **held-out**, **grows** every time a new failure is found (the failure becomes a regression test), includes **adversarial** cases, and is backed by **human spot-checks** on a sample of self-modification commits. Unverifiable work routes to a human judge. Every self-modification passes before commit; failures roll back.
-- **Credential & capability scoping.** Least privilege per task; revocable; never broad standing access to Apple/Vultr/Firebase/payment accounts.
+- **Credential & capability scoping.** Least privilege per task; revocable; never broad standing access to Apple/Vultr/Firebase/payment accounts. The model may propose tool calls, but a policy layer authorizes execution from `security/tool-policy.yaml`; authorization never depends on model confidence.
 
 ---
 
@@ -303,6 +304,8 @@ flowchart LR
 ```
 
 **Promotion gates:** *Skill → shared:* passes tests, is general (not project-specific), not a near-duplicate, succeeded N times, `generic: true`. *Fact → shared:* corroborated by a **different source class**, project-stripped, with provenance and confidence.
+
+**Memory admission gate:** no raw web/file/tool/user content is written directly to durable memory. Every memory write passes `security/memory-admission-policy.md`: source trust classification, prompt-injection scan, sensitive-data scan, project-specific leakage scan, TTL/retention decision, provenance, and a reason it is useful outside the immediate context. Failing any check rejects the write or routes it to human review.
 
 ---
 
@@ -410,6 +413,8 @@ flowchart LR
 ### 11A.2 Boundary instrumentation (mandatory)
 The effector runs its own loop you don't fully see, so it is a black box inside your trace spine. Instrument the **boundary** so the cost curve and provenance survive: capture its token usage and dollar cost, its session log/transcript, the number of internal retries, and the **git diff** of exactly what it changed. Attach all of it to the task trace as an `effector_session` span. Without this, the spend most likely to sink the project hides where you can't see it.
 
+The effector runs under `tools/coding-effector-contract.md` and `tools/coding-effector-sandbox.yaml`: fresh worktree, scoped filesystem, scoped credentials, bounded network egress, no ambient secrets, explicit shell permissions, secret scanning before trace persistence, and diff-only acceptance through the Definition-of-Done gate.
+
 ### 11A.3 When NOT to use it (avoid the thin pass-through)
 The degenerate failure is the agent forwarding a prompt to the effector and relaying the result — pure latency and token tax for no added value. The driver layer earns its keep only by doing what the effector cannot: persistent memory, planning across many tasks, the economic loop, independent verification, and cross-project learning. Apply the capability-escalation ladder: a trivial mechanical edit the agent does directly or with a cheap model; reserve a full effector session for substantial work where its agentic loop pays for itself. The standing test on any task is: *what is the driver adding here beyond what the effector already does?*
 
@@ -479,8 +484,10 @@ Structured, append-only events with **trace IDs per task** (spans for every tool
 ## 15. Safety & trust boundaries (non-negotiable)
 
 - **Money/contracts/publishing/credentials/kernel changes/novel actions** → human approval queue, by task class, always.
-- **Web/tool/file content is data, not instructions** (prompt-injection defense).
-- **Least-privilege, revocable credentials** per task; no broad standing access.
+- **Web/tool/file content is data, not instructions** (prompt-injection defense). External content enters through `security/untrusted-content-pipeline.md`: quarantine, sanitization, source labeling, optional summarization by a low-privilege reader, and action screening against the original task before any tool call.
+- **Least-privilege, revocable credentials** per task; no broad standing access. Tool execution is authorized by `security/tool-policy.yaml`, not by the model.
+- **Memory writes are gated.** Durable memory accepts only validated, source-labeled, project-stripped, retention-scoped records under `security/memory-admission-policy.md`.
+- **Approvals are exact and expiring.** High-impact execution requires a valid `security/approval-record.schema.json` record bound to normalized parameters.
 - **Regression guard + Definition-of-Done before every commit**; rollback on failure.
 - **Kernel, dream job, and regression guard are seed-owned**, not self-written; the system may *propose* changes to them, not apply them.
 
@@ -492,6 +499,7 @@ Structured, append-only events with **trace IDs per task** (spans for every tool
 - **`capability_score` is measured, not declared.** Derive model capability scores from the eval harness; re-measure on model updates.
 - **Schema migration.** Version every store schema; keep a migration path; snapshot before migrations.
 - **Confidence is unreliable.** Gate on task class and objective signals (tests passed, tool agreement), not self-reported confidence.
+- **Schemas are executable contracts.** Task results, trace events, approval records, and Phase -1 metrics are validated against JSON Schema before persistence or CI acceptance.
 
 ---
 
@@ -584,8 +592,9 @@ Two repositories, both scaffolded from the same template:
 /coordination  DEFERRED - build only when earned
 /project       scaffolder, definition_of_done, code_graph_indexer, project-template/
 /tools         primitive tools + registered skill-tools + coding_effector adapter (spec-in/verified-out, instrumented)
+/security      tool policy, approval policy, memory admission, untrusted-content pipeline, data classification
 /observability dashboards (P1), trace queries
-/evals         rotating regression harness + held-out sets
+/evals         rotating regression harness + held-out sets + red-team suites
 /experiments   Phase -1 validation harness and results
 /tasks         TaskSpec backlog
 ```
@@ -609,6 +618,12 @@ Two repositories, both scaffolded from the same template:
 - **The coding effector is a black box** in the trace spine. → boundary instrumentation: capture its cost, transcript, retries, and git diff as an `effector_session` span (Section 11A.2).
 - **The agent↔effector seam re-creates coordination failures** (spec ambiguity, misalignment, weak verification — the MAST modes). → spec-in/verified-out contract; effector "done" untrusted until the Definition-of-Done gate passes.
 - **The thin pass-through** (driver adds nothing but latency and token tax). → capability-escalation ladder for coding; the standing "what is the driver adding here?" test (Section 11A.3).
+- **Measurement can lie.** → Phase -1 must be pre-registered with fixed task order, baseline/control runs, model/cache/pricing pins, exclusion rules, and schema-validated results before the first run.
+- **Prompt injection can arrive indirectly.** → all external content is quarantined, labeled as untrusted, sanitized, and prevented from authorizing tool calls; red-team suites cover direct, indirect, encoded, and persistent attacks.
+- **Memory poisoning can persist attacks across sessions.** → memory admission rejects raw external content, scans for injection and sensitive data, isolates scope, applies TTLs, and records provenance.
+- **Approval prompts can be manipulated or replayed.** → high-impact approvals are parameter-bound, expiring, policy-versioned, and replay-protected.
+- **Trace logs can become a sensitive-data store.** → trace schema, redaction policy, retention policy, encryption, and access controls are part of the seed gate.
+- **Eval harnesses can be weakened by the same change they are meant to judge.** → eval governance requires protected held-out sets and human review for changes to evals, policies, prompts, memory gates, retrieval config, or tool scopes.
 
 ---
 
@@ -624,9 +639,65 @@ Two repositories, both scaffolded from the same template:
 - The **coding effector** choice (Claude Code vs. a swappable effector behind an interface) and the threshold that separates a "trivial edit" done directly from "substantial work" delegated to a full effector session.
 - **Credential scopes** and which action classes are always human-gated.
 - The **dream window** cadence.
+- The **tool policy** risk matrix and which operations require parameter-bound approval.
+- The **data classification** and retention rules for traces, transcripts, diffs, memory, and eval evidence.
+- The **Phase -1 baseline/control** and exact statistical pass/fail thresholds.
 
 ---
 
-## 24. The success metric that matters
+## 24. Assurance artifacts and release gates
+
+These artifacts are not optional supporting docs. They are part of the seed contract. Phase -1 cannot be accepted, Phase 0 cannot start, and self-modification cannot land unless the relevant artifact exists, is versioned, and is enforced by CI or the runtime policy layer.
+
+### 24.1 Required artifacts
+
+- `docs/threat-model.md` — assets, trust boundaries, attackers, abuse cases, controls, residual risk.
+- `experiments/phase_minus_1/protocol.md` — pre-registered experimental design, baselines, model/cache/pricing pins, task ordering, exclusion rules, and pass/fail statistics.
+- `experiments/phase_minus_1/taskset.schema.json` — schema for the fixed task manifest.
+- `experiments/phase_minus_1/results.schema.json` — schema for per-task metrics and aggregate gate decision.
+- `security/tool-policy.yaml` — per-tool allowlists, parameter schemas, risk levels, credential scopes, rate limits, and fail-closed behavior.
+- `security/approval-policy.md` — which action classes require human review and how approval is bound to exact execution.
+- `security/approval-record.schema.json` — executable schema for approval records.
+- `security/untrusted-content-pipeline.md` — quarantine, sanitization, source labeling, action screening, and prompt-injection test requirements.
+- `security/memory-admission-policy.md` — durable-memory admission, project-stripping, injection/sensitive-data scans, TTLs, provenance, and rejection rules.
+- `security/data-classification-policy.md` — classification and handling for public, internal, confidential, and restricted data.
+- `evals/eval-governance.md` — held-out policy, eval-change review rules, evidence retention, and model/tool/retrieval pinning.
+- `evals/regression-manifest.yaml` — suite registry for rotating, held-out, adversarial, and discovered-failure tests.
+- `evals/redteam/*.jsonl` — prompt-injection, memory-poisoning, tool-abuse, and approval-bypass cases.
+- `observability/trace-schema.json` — executable schema for task traces and spans.
+- `observability/redaction-policy.md` — what is never logged, redacted, hashed, encrypted, or sampled.
+- `observability/retention-policy.md` — retention windows, access controls, deletion, and replay limits.
+- `tools/coding-effector-contract.md` — TaskSpec input, verified-artifact output, retry/cost/diff evidence, and acceptance criteria.
+- `tools/coding-effector-sandbox.yaml` — filesystem, shell, network, credential, and artifact limits for effector sessions.
+- `ci/definition_of_done.yaml` — CI gate that references these artifacts and blocks merges when policies, evals, traces, or effector evidence are missing.
+
+### 24.2 CI gates
+
+The Definition-of-Done gate blocks merge if any of these are true:
+
+- a registered tool has no `security/tool-policy.yaml` entry;
+- a high-risk action can execute without a valid, unexpired, parameter-bound approval record;
+- prompt/tool/memory/retrieval/model changes skip the relevant red-team and regression eval suites;
+- eval, policy, approval, or credential-scope files change without human review;
+- traces, transcripts, or diffs contain unredacted restricted data or secret-like values;
+- effector sessions lack cost, transcript reference, retry count, sandbox profile, and diff reference;
+- Phase -1 results do not validate against `experiments/phase_minus_1/results.schema.json`;
+- Phase -1 claims a pass without matching the pre-registered protocol.
+
+### 24.3 Runtime gates
+
+The kernel, not the model, enforces:
+
+- tool authorization from policy before every tool call;
+- memory admission before every durable memory write;
+- action screening before executing a tool call influenced by untrusted content;
+- approval binding before high-impact actions;
+- trace redaction before persistence;
+- cost, retry, recursion, and wall-clock limits for every task;
+- fail-closed behavior when policy lookup, schema validation, audit logging, or approval verification fails.
+
+---
+
+## 25. The success metric that matters
 
 Watch one curve above all: **cost (tokens + wall-clock) and quality of the Nth task in a domain.** If task #20 is cheaper and better than task #1 because it reused generic skills and craft, the architecture is compounding and you have something genuinely new. The two-plane separation is what makes that compounding *portable* — the agent gets better at building systems in general, not just better at the one system it happens to be building. Phase −1 and the standing cost-per-task gate exist precisely so you learn whether this is real early and cheaply, instead of after building the whole thing.

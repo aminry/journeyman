@@ -1,0 +1,202 @@
+# Tool authorization policy for the Journeyman kernel.
+#
+# The model may propose a tool call. The kernel authorizes execution from this
+# file. If a tool is missing, schema validation fails, risk classification fails,
+# or audit logging fails, execution is denied.
+
+version: 1
+default_action: deny
+fail_closed: true
+
+risk_levels:
+  low:
+    description: Read-only or deterministic local computation with no external side effect.
+    approval_required: false
+  medium:
+    description: Local writes, repo edits, package installs, or bounded network reads.
+    approval_required: false
+  high:
+    description: External communication, deployment, credential use, shell with broad effect, or data export.
+    approval_required: true
+  critical:
+    description: Payment, production deletion, credential mutation, account/admin change, publishing, or kernel/dream/guard change.
+    approval_required: true
+    step_up_auth_required: true
+
+global_limits:
+  max_tool_calls_per_task: 200
+  max_recursive_tool_depth: 8
+  max_wall_clock_seconds_per_task: 7200
+  max_cost_usd_per_task_without_approval: 25
+
+tools:
+  read_file:
+    risk: low
+    operations: ["read"]
+    allowed_paths:
+      - "./**"
+    denied_paths:
+      - "**/.env"
+      - "**/*.pem"
+      - "**/*.key"
+      - "**/*secret*"
+      - "**/*credential*"
+    parameter_schema:
+      type: object
+      required: ["path"]
+      additionalProperties: false
+      properties:
+        path:
+          type: string
+        start_line:
+          type: integer
+          minimum: 1
+        end_line:
+          type: integer
+          minimum: 1
+
+  write_file:
+    risk: medium
+    operations: ["create", "update"]
+    allowed_paths:
+      - "./docs/**"
+      - "./experiments/**"
+      - "./security/**"
+      - "./evals/**"
+      - "./observability/**"
+      - "./tools/**"
+      - "./ci/**"
+      - "./tasks/**"
+      - "./src/**"
+      - "./tests/**"
+    denied_paths:
+      - ".git/**"
+      - "**/.env"
+      - "**/*.pem"
+      - "**/*.key"
+    requires:
+      - trace_span
+      - diff_capture
+      - secret_scan_before_commit
+    parameter_schema:
+      type: object
+      required: ["path", "content_hash"]
+      additionalProperties: false
+      properties:
+        path:
+          type: string
+        content_hash:
+          type: string
+        mode:
+          enum: ["create", "replace", "patch"]
+
+  shell:
+    risk: medium
+    operations: ["execute"]
+    allowed_commands:
+      - "pytest"
+      - "python -m build"
+      - "ruff"
+      - "black"
+      - "hooks/regenerate_code_graph.sh"
+      - "hooks/run_dod.sh"
+      - "git diff"
+      - "git status"
+    denied_patterns:
+      - "rm -rf"
+      - "git reset --hard"
+      - "git checkout --"
+      - "curl * | sh"
+      - "chmod 777"
+      - "sudo *"
+      - "security find-generic-password"
+    network_allowed: false
+    approval_overrides:
+      high_if_command_matches:
+        - "gh pr create*"
+        - "git push*"
+        - "npm publish*"
+        - "twine upload*"
+      critical_if_command_matches:
+        - "*delete*production*"
+        - "*rotate*credential*"
+
+  web_fetch:
+    risk: low
+    operations: ["read_network"]
+    network_allowed: true
+    output_trust: untrusted
+    requires:
+      - untrusted_content_pipeline
+    parameter_schema:
+      type: object
+      required: ["url"]
+      additionalProperties: false
+      properties:
+        url:
+          type: string
+          format: uri
+
+  query_memory:
+    risk: low
+    operations: ["read_memory"]
+    requires:
+      - source_labels_in_output
+      - retrieval_trace
+
+  write_memory:
+    risk: medium
+    operations: ["write_memory"]
+    requires:
+      - memory_admission_policy
+      - provenance
+      - ttl_or_retention_class
+      - project_specific_leakage_scan
+
+  drive_coding_effector:
+    risk: high
+    operations: ["repo_write", "shell", "test"]
+    approval_required_when:
+      - touches_protected_path
+      - requests_network_egress
+      - requests_credentials
+      - modifies_kernel_dream_guard_or_eval_policy
+    requires:
+      - task_spec
+      - acceptance_tests
+      - coding_effector_sandbox
+      - effector_session_span
+      - diff_capture
+      - dod_gate
+      - secret_scan_before_trace_persistence
+
+  deploy:
+    risk: critical
+    operations: ["external_side_effect", "production_change"]
+    approval_required: true
+    requires:
+      - parameter_bound_approval
+      - step_up_auth
+      - rollback_plan
+      - audit_log
+
+  payment_or_contract:
+    risk: critical
+    operations: ["money", "contract"]
+    approval_required: true
+    auto_execute: false
+    requires:
+      - parameter_bound_approval
+      - human_execution_or_separate_policy_service
+
+policy_change_controls:
+  files:
+    - "security/tool-policy.yaml"
+    - "security/approval-policy.md"
+    - "security/memory-admission-policy.md"
+    - "security/untrusted-content-pipeline.md"
+  requires_human_review: true
+  requires_redteam_suites:
+    - "tool-abuse"
+    - "approval-bypass"
+    - "prompt-injection"

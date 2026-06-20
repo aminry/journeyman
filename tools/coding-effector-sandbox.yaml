@@ -1,0 +1,87 @@
+version: 1
+profile_id: coding-effector-default
+description: Default sandbox profile for coding effector sessions.
+
+filesystem:
+  mode: isolated_worktree
+  root: "${TASK_WORKTREE}"
+  writable_paths:
+    - "${TASK_WORKTREE}/**"
+  read_only_paths:
+    - "${REPO_ROOT}/docs/**"
+    - "${REPO_ROOT}/project/project-template/**"
+  denied_paths:
+    - "${HOME}/.ssh/**"
+    - "${HOME}/.aws/**"
+    - "${HOME}/.config/gh/**"
+    - "${HOME}/.npmrc"
+    - "${HOME}/.pypirc"
+    - "**/.env"
+    - "**/*.pem"
+    - "**/*.key"
+    - "**/*secret*"
+
+shell:
+  enabled: true
+  default_timeout_seconds: 300
+  max_commands_per_session: 120
+  allowed_command_prefixes:
+    - "python"
+    - "pytest"
+    - "ruff"
+    - "black"
+    - "git diff"
+    - "git status"
+    - "hooks/"
+    - "./run.sh"
+  denied_patterns:
+    - "sudo "
+    - "rm -rf"
+    - "git reset --hard"
+    - "git checkout --"
+    - "curl * | sh"
+    - "chmod 777"
+
+network:
+  default: deny
+  allowed_hosts: []
+  approval_required_for_egress: true
+
+credentials:
+  ambient_credentials: deny
+  allowed_env_vars:
+    - "PORT"
+    - "PYTHONPATH"
+  approval_required_for:
+    - "GITHUB_TOKEN"
+    - "OPENAI_API_KEY"
+    - "ANTHROPIC_API_KEY"
+    - "deployment_credentials"
+
+artifacts:
+  required:
+    - diff_ref
+    - transcript_ref
+    - commands_run
+    - tests_run
+    - cost_usage
+    - retry_count
+  scan_before_persist:
+    - transcript_ref
+    - diff_ref
+    - stdout
+    - stderr
+
+limits:
+  max_wall_clock_seconds: 3600
+  max_cost_usd_without_approval: 25
+  max_retries_before_escalation: 3
+
+protected_paths:
+  require_human_review:
+    - "kernel/**"
+    - "dream/**"
+    - "governance/regression_guard/**"
+    - "security/**"
+    - "evals/**"
+    - "ci/**"

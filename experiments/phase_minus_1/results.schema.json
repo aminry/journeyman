@@ -1,0 +1,123 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://journeyman.local/schemas/phase-minus-1-results.json",
+  "title": "Phase -1 Results",
+  "type": "object",
+  "required": ["protocol_version", "run_id", "started_at", "completed_at", "pins", "tasks", "aggregate", "decision"],
+  "additionalProperties": false,
+  "properties": {
+    "protocol_version": {
+      "type": "string"
+    },
+    "run_id": {
+      "type": "string"
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "completed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "pins": {
+      "type": "object",
+      "required": ["model_ids", "effector_version", "pricing_snapshot", "cache_policy", "retrieval_config"],
+      "additionalProperties": true,
+      "properties": {
+        "model_ids": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1
+        },
+        "effector_version": { "type": "string" },
+        "pricing_snapshot": { "type": "string" },
+        "cache_policy": { "type": "string" },
+        "retrieval_config": { "type": "string" }
+      }
+    },
+    "tasks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "position",
+          "task_id",
+          "tier",
+          "total_cost_usd",
+          "wall_clock_seconds",
+          "dod_passed",
+          "contract_passed",
+          "contract_tests_passed",
+          "contract_tests_total",
+          "effector_retries",
+          "first_pass_contract_success",
+          "craft_items_retrieved",
+          "craft_items_reused",
+          "trace_id"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "position": { "type": "integer", "minimum": 1 },
+          "task_id": { "type": "string" },
+          "tier": { "enum": ["easy", "medium", "hard"] },
+          "model_cost_usd": { "type": "number", "minimum": 0 },
+          "effector_cost_usd": { "type": "number", "minimum": 0 },
+          "total_cost_usd": { "type": "number", "minimum": 0 },
+          "wall_clock_seconds": { "type": "number", "minimum": 0 },
+          "dod_passed": { "type": "boolean" },
+          "contract_passed": { "type": "boolean" },
+          "contract_tests_passed": { "type": "integer", "minimum": 0 },
+          "contract_tests_total": { "type": "integer", "minimum": 1 },
+          "effector_retries": { "type": "integer", "minimum": 0 },
+          "first_pass_contract_success": { "type": "boolean" },
+          "craft_items_retrieved": {
+            "type": "array",
+            "items": { "type": "string" },
+            "uniqueItems": true
+          },
+          "craft_items_reused": {
+            "type": "array",
+            "items": { "type": "string" },
+            "uniqueItems": true
+          },
+          "human_interventions": { "type": "integer", "minimum": 0 },
+          "security_events": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "excluded_from_slope": { "type": "boolean" },
+          "exclusion_reason": { "type": "string" },
+          "trace_id": { "type": "string" }
+        }
+      }
+    },
+    "aggregate": {
+      "type": "object",
+      "required": ["warmup_tasks", "cost_slope_after_warmup", "quality_holds", "reuse_is_real", "security_controls_held"],
+      "additionalProperties": true,
+      "properties": {
+        "warmup_tasks": { "type": "integer", "minimum": 0 },
+        "cost_slope_after_warmup": { "type": "number" },
+        "retry_slope_after_warmup": { "type": "number" },
+        "quality_holds": { "type": "boolean" },
+        "reuse_is_real": { "type": "boolean" },
+        "security_controls_held": { "type": "boolean" }
+      }
+    },
+    "decision": {
+      "type": "object",
+      "required": ["status", "rationale"],
+      "additionalProperties": false,
+      "properties": {
+        "status": { "enum": ["pass", "fail", "invalid", "stopped"] },
+        "rationale": { "type": "string" },
+        "residual_risks": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    }
+  }
+}

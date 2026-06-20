@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://journeyman.local/schemas/phase-minus-1-taskset.json",
+  "title": "Phase -1 Taskset Manifest",
+  "type": "object",
+  "required": ["protocol_version", "domain", "task_order"],
+  "additionalProperties": false,
+  "properties": {
+    "protocol_version": {
+      "type": "string",
+      "pattern": "^v[0-9]+$"
+    },
+    "domain": {
+      "const": "spec-to-crud-service"
+    },
+    "task_order": {
+      "type": "array",
+      "minItems": 30,
+      "maxItems": 30,
+      "items": {
+        "type": "object",
+        "required": ["position", "id", "tier", "spec_path", "feature_tags"],
+        "additionalProperties": false,
+        "properties": {
+          "position": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 30
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_-]*$"
+          },
+          "tier": {
+            "enum": ["easy", "medium", "hard"]
+          },
+          "spec_path": {
+            "type": "string",
+            "pattern": "^experiments/phase_minus_1/instances/.+\\.spec\\.ya?ml$"
+          },
+          "feature_tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "expected_contract_tests_min": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      }
+    }
+  }
+}

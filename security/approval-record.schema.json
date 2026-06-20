@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://journeyman.local/schemas/approval-record.json",
+  "title": "Parameter-Bound Approval Record",
+  "type": "object",
+  "required": [
+    "approval_id",
+    "actor_id",
+    "task_id",
+    "trace_id",
+    "tool_name",
+    "risk_class",
+    "target_resource",
+    "normalized_parameters",
+    "normalized_parameters_sha256",
+    "reason",
+    "policy_version",
+    "approver_id",
+    "issued_at",
+    "expires_at",
+    "nonce",
+    "status"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "approval_id": {
+      "type": "string",
+      "pattern": "^appr_[A-Za-z0-9_-]+$"
+    },
+    "actor_id": { "type": "string" },
+    "task_id": { "type": "string" },
+    "trace_id": { "type": "string" },
+    "tool_name": { "type": "string" },
+    "risk_class": { "enum": ["high", "critical"] },
+    "target_resource": { "type": "string" },
+    "normalized_parameters": { "type": "object" },
+    "normalized_parameters_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "reason": { "type": "string", "minLength": 1 },
+    "policy_version": { "type": "integer", "minimum": 1 },
+    "approver_id": { "type": "string" },
+    "issued_at": { "type": "string", "format": "date-time" },
+    "expires_at": { "type": "string", "format": "date-time" },
+    "nonce": {
+      "type": "string",
+      "minLength": 16
+    },
+    "step_up_auth_ref": { "type": "string" },
+    "status": {
+      "enum": ["pending", "approved", "denied", "expired", "used", "revoked"]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "risk_class": { "const": "critical" } }
+      },
+      "then": {
+        "required": ["step_up_auth_ref"]
+      }
+    }
+  ]
+}
