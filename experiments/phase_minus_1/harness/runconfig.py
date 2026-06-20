@@ -54,9 +54,7 @@ class RunConfig:
     embedding_normalize: bool = True
     embedding_similarity: str = "cosine"
     retrieval_k: int = 5
-    embedding_query_prefix: str = (
-        "Represent this sentence for searching relevant passages:"
-    )
+    embedding_query_prefix: str = "Represent this sentence for searching relevant passages:"
     # Effector invocation template. {prompt} is substituted by render_effector_command.
     # Scoped permissions preferred over --dangerously-skip-permissions: the effector
     # already runs in an isolated, network/credential-scoped worktree
@@ -67,6 +65,11 @@ class RunConfig:
     permission_mode: str = "acceptEdits"
     max_turns: int = 60
     budget_cap_usd: float = 10.0
+    # Per-tier per-task budget caps so one pathological instance can't distort the curve
+    # (manifest.md: E≈$3, M≈$5, H≈$8; tuned after the first triplet).
+    tier_budget_caps: dict[str, float] = field(
+        default_factory=lambda: {"easy": 3.0, "medium": 5.0, "hard": 8.0}
+    )
     sandbox_profile: str = "coding-effector-default"
     network_policy: str = (
         "deny-by-default; allowlist PyPI + Anthropic API for the real run (experiment-only)"
@@ -92,6 +95,9 @@ class RunConfig:
     def estimate_cost(self, model: str, tokens_in: int, tokens_out: int) -> float:
         p = self.price_for(model)
         return round(tokens_in / 1_000_000 * p["input"] + tokens_out / 1_000_000 * p["output"], 6)
+
+    def budget_cap_for(self, tier: str) -> float:
+        return self.tier_budget_caps.get(tier, self.budget_cap_usd)
 
     def render_effector_command(self, prompt: str) -> list[str]:
         return [
