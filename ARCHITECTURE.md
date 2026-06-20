@@ -7,8 +7,8 @@ This is the **living** map of the Journeyman's structure, kept current by the De
 | Component (dir) | Responsibility | Status |
 |---|---|---|
 | `kernel/` | Agent runtime (work loop), model router, tool registry, execution sandbox, event bus / trace log. **Protected** — human sign-off required to change. | Seed |
-| `memory/` | Agent knowledge (Plane B): episodic log, vector semantic + summary memory, generic skill library, promotion gates. | Seed (agent graph deferred) |
-| `governance/` | Budget ledger, cost ceiling, cost-per-task gate, human approval queue, credential/capability scoping, regression guard + rotating eval harness. | Seed |
+| `memory/` | Agent knowledge (Plane B): episodic log, vector semantic + summary memory, generic skill library (model/effector-`validated_against` manifests), promotion gates with execution-grounded corroboration, unlearning + protected-class forgetting. | Seed (agent graph deferred) |
+| `governance/` | Budget ledger, cost ceiling, total-cost-per-task gate (amortized overhead), scalable human oversight (risk-weighted sampling, fail-closed), credential/capability scoping, regression guard + rotating eval harness. | Seed |
 | `dream/` | Consolidation, the distillation boundary (Plane A↔B), skill-library maintenance. **Seed-owned, conservative.** | Seed |
 | `cognition/` | Retrieval, immediate reflection. | Seed (curriculum deferred) |
 | `tools/` | Primitive tools (shell, file, web fetch, code exec) and the **coding-effector adapter** (Claude Code, spec-in/verified-out, instrumented). | Seed |
@@ -33,6 +33,10 @@ This is the **living** map of the Journeyman's structure, kept current by the De
 
 ## Coding effector boundary
 
-Coding is delegated to a coding effector driven as a tool (ADR-0005). The agent sends a TaskSpec + acceptance tests; the effector works inside the target repo; output is accepted only when the Definition-of-Done gate passes; the boundary is instrumented (cost, transcript, retries, git diff) as an `effector_session` span.
+Coding is delegated to a coding effector driven as a tool (ADR-0005). The agent sends a TaskSpec + acceptance tests; the effector works inside the target repo; output is accepted only when the Definition-of-Done gate passes; the boundary is instrumented (cost, transcript, retries, git diff) as an `effector_session` span. The gate also runs **code-security scanning** (SAST + SCA, ADR-0010) on what the effector writes, and the TaskSpec + acceptance tests are **independently verified by a different source class** before the effector runs on risk/cost-gated tasks (ADR-0014) — the spec/tests are the trust anchor, so they are checked, not assumed.
+
+## Runtime operations boundary (Phase 2)
+
+Build-time controls (sandbox, no ambient credentials) do not fit a live product. `security/runtime-ops-policy.md` (ADR-0011) governs run-time: reversible ops (canary deploy, scale, rollback) are autonomous within blast-radius limits with automated rollback; irreversible ops (migrations, deletes, payments, billing, DNS, credential mutation) are human-gated; production credentials are scoped, revocable, and never ambient; an operator kill switch is always live.
 
 > Keep this file accurate. If a change alters a component's responsibility, status, or a control flow, update the relevant row/section in the same change (enforced by the docs-in-sync gate).

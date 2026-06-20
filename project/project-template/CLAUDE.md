@@ -25,6 +25,7 @@ A change is **done only when the Definition-of-Done gate passes** — never beca
 - unit and integration tests pass;
 - coverage stays at or above the project threshold;
 - the build is green and lint/format is clean;
+- **product code passes security scanning** (SAST + dependency/SCA + in-code secret scan), fail-closed;
 - **documentation is in sync** (§4);
 - the **code graph is regenerated** and committed.
 

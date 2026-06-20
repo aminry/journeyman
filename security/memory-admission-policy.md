@@ -27,7 +27,12 @@ Every durable memory write must include:
 - project-specific leakage scan result;
 - prompt-injection scan result;
 - sensitive-data scan result;
-- corroboration or test evidence, when promoting to Plane B.
+- experience-poisoning check (an episode is not admitted as "successful" on a
+  self-reported or model-judged signal alone);
+- `derived_from`: the source/episode ids, so consolidated memories can be tainted
+  and unlearned later;
+- corroboration or test evidence when promoting to Plane B — execution-grounded
+  for behavior-changing memories.
 
 ## Rejection Rules
 
@@ -42,14 +47,27 @@ Reject or route to human review if:
 - source trust level is untrusted and no independent corroboration exists;
 - retention class is missing;
 - provenance is missing;
-- the write would exceed memory size or duplicate-rate limits.
+- the write would exceed memory size or duplicate-rate limits;
+- the candidate is a "successful experience" whose only support is a self-reported
+  or model-judged success signal, with no execution-grounded corroboration
+  (plausible-success / experience-poisoning defense — injection scanning is
+  necessary, not sufficient);
+- a behavior-changing memory (one that changes routing, tool selection, review, or
+  action) lacks an objective, execution-grounded signal (a test that ran, a tool
+  result) or a human sign-off.
 
 ## Promotion To Plane B
 
 Promotion requires:
 
-- project-specific identifiers removed or abstracted;
-- test, tool, different model family, or human corroboration;
+- project-specific identifiers removed or abstracted, plus a sampled human audit
+  of promoted craft for residual project-specificity — identifier stripping does
+  not catch domain bias, and the distillation boundary is a model judgment, not a
+  proof;
+- corroboration by a different source class; for behavior-changing craft the
+  corroboration must be execution-grounded (a test that actually ran or a real
+  tool result), since a second model's agreement is correlated, not independent;
+- for skills, a `validated_against` record (model/effector/embedding) per ADR-0013;
 - retrieval summary that explains when to use it;
 - conflict check against existing memories and skills;
 - regression/eval pass if the memory changes routing, tool selection, or review
@@ -68,3 +86,27 @@ Memory retrieval must return:
 - any restrictions on use.
 
 The model must not receive raw rejected memory candidates.
+
+## Forgetting (Decay)
+
+Forgetting keeps the retrieval surface small, but it is constrained (ADR-0012):
+
+- forgetting is reversible cold-archive, never hard delete;
+- a protected class — safety, security, and approval lessons, and discovered
+  failures promoted to regression — never decays;
+- forgetting decisions are eval-gated like any other self-modification, and
+  recorded so they can be reversed.
+
+## Unlearning
+
+Durable memories carry `derived_from` (the episode/source ids they consolidated
+from). When an episode is found poisoned, wrong, or invalidated:
+
+- its derivatives are tainted via `derived_from`;
+- the system rolls back to the last clean versioned snapshot and re-derives
+  forward (the seed mechanism);
+- a full provenance graph for targeted, non-rollback revert is deferred until
+  volume justifies it.
+
+Admission scanning catches injection and sensitive data; unlearning is the
+recovery path for poison that looked benign at admission.

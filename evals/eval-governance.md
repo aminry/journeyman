@@ -25,7 +25,9 @@ Human review is required for changes to:
 - retrieval ranking;
 - memory admission;
 - tool policy or credential scopes;
-- coding-effector sandbox permissions.
+- coding-effector sandbox permissions;
+- `memory/skill-manifest.schema.json` (the craft contract);
+- `security/code-security-policy.md` and `security/runtime-ops-policy.md`.
 
 The same change cannot weaken evals and rely on those weakened evals to pass.
 If eval weakening is intentional, it requires a separate reviewed change with a
@@ -54,6 +56,30 @@ clear rationale.
 - If a held-out case fails, the failure is triaged. A sanitized version may be
   promoted to public regression after a fix lands.
 
+## Craft Re-Validation On Model/Effector Change
+
+A material model, effector, or embedding change re-runs the evals of affected
+skills (ADR-0013). Skills that regress are quarantined (`status: quarantined` in
+`memory/skill-manifest.schema.json`) and not retrieved until repaired and
+re-validated. Capability-score re-measurement (SPEC §16) and craft re-validation
+are distinct: scores gate routing; craft re-validation gates retrieval of the
+craft itself.
+
+## Brain-Faithfulness Audit (scheduled)
+
+The docs-in-sync DoD gate checks that an ADR/ARCHITECTURE update is *present*; it
+cannot check that the project brain is *faithful*. A scheduled audit samples
+recent changes and verifies that `ARCHITECTURE.md`, ADRs, and `docs/knowledge/`
+actually match the code — a fresh agent's productivity depends on brain quality,
+not just brain presence. Findings become discovered-failure regressions.
+
+## Experience-Poisoning And Spec/Test Verification Evidence
+
+- The memory-poisoning suite includes plausible-success (MemoryGraft/MINJA-style)
+  cases, not only injection payloads (ADR-0012).
+- For risk/cost-gated effector tasks, the evidence bundle includes the independent
+  spec/test review (`verification` span) per ADR-0014.
+
 ## Blocking Conditions
 
 Block merge or release when:
@@ -63,4 +89,8 @@ Block merge or release when:
 - expected-denial cases are allowed;
 - a high-risk policy changed without the matching red-team suites;
 - held-out pass rate drops below the configured threshold;
-- grader behavior changes without review.
+- grader behavior changes without review;
+- a behavior-changing memory or skill is promoted without execution-grounded
+  corroboration;
+- a model/effector/embedding change lands without craft re-validation;
+- a risk/cost-gated effector task lacks an independent spec/test verification span.

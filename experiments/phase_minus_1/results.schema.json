@@ -5,6 +5,18 @@
   "type": "object",
   "required": ["protocol_version", "run_id", "started_at", "completed_at", "pins", "tasks", "aggregate", "decision"],
   "additionalProperties": false,
+  "allOf": [
+    {
+      "$comment": "A full pass requires the mandatory control run and its delta (ADR-0017).",
+      "if": {
+        "required": ["decision"],
+        "properties": { "decision": { "required": ["status"], "properties": { "status": { "const": "pass" } } } }
+      },
+      "then": {
+        "properties": { "aggregate": { "required": ["control_run_present", "treatment_vs_control_delta"], "properties": { "control_run_present": { "const": true } } } }
+      }
+    }
+  ],
   "properties": {
     "protocol_version": {
       "type": "string"
@@ -95,11 +107,30 @@
     },
     "aggregate": {
       "type": "object",
-      "required": ["warmup_tasks", "cost_slope_after_warmup", "quality_holds", "reuse_is_real", "security_controls_held"],
+      "required": ["warmup_tasks", "cost_slope_after_warmup", "cost_slope_ci", "min_detectable_slope", "control_run_present", "treatment_vs_control_delta", "quality_holds", "reuse_is_real", "security_controls_held"],
       "additionalProperties": true,
       "properties": {
         "warmup_tasks": { "type": "integer", "minimum": 0 },
         "cost_slope_after_warmup": { "type": "number" },
+        "cost_slope_ci": {
+          "type": "array",
+          "description": "[low, high] confidence interval for the slope (ADR-0017).",
+          "items": { "type": "number" },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "min_detectable_slope": {
+          "type": "number",
+          "description": "Pre-registered effect size the run is powered to detect."
+        },
+        "control_run_present": {
+          "type": "boolean",
+          "description": "Run B (memory-disabled control) executed; must be true for a full pass."
+        },
+        "treatment_vs_control_delta": {
+          "type": "number",
+          "description": "Treatment-minus-control cost-slope delta; primary craft-attribution evidence."
+        },
         "retry_slope_after_warmup": { "type": "number" },
         "quality_holds": { "type": "boolean" },
         "reuse_is_real": { "type": "boolean" },
@@ -111,7 +142,7 @@
       "required": ["status", "rationale"],
       "additionalProperties": false,
       "properties": {
-        "status": { "enum": ["pass", "fail", "invalid", "stopped"] },
+        "status": { "enum": ["pass", "provisional_pass", "fail", "invalid", "stopped"] },
         "rationale": { "type": "string" },
         "residual_risks": {
           "type": "array",

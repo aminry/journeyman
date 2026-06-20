@@ -15,6 +15,8 @@ thresholds:
   max_lint_warnings: 0
   max_changed_files_without_adr: 50
   max_high_severity_security_events: 0
+  code_security_block_severity: high      # min SAST/SCA severity that blocks merge (ADR-0010)
+  spec_review_required_above_cost_usd: 10 # independent spec+test review above this task cost (ADR-0014)
 
 on_fail: block_merge
 on_pass: allow_merge
@@ -38,6 +40,9 @@ assurance_artifacts:
   retention_policy: "observability/retention-policy.md"
   effector_contract: "tools/coding-effector-contract.md"
   effector_sandbox: "tools/coding-effector-sandbox.yaml"
+  code_security_policy: "security/code-security-policy.md"
+  runtime_ops_policy: "security/runtime-ops-policy.md"
+  skill_manifest_schema: "memory/skill-manifest.schema.json"
 
 gates:
 
@@ -78,6 +83,8 @@ gates:
     description: >
       Architectural changes must update docs in the same change: a new ADR or an
       ARCHITECTURE.md update, unless the change declares `architecture-impact: none`.
+      This gate checks doc *presence*; doc *faithfulness* is sampled separately by
+      the scheduled brain-faithfulness audit (evals/eval-governance.md).
     required: true
     runner: "python hooks/check_docs_sync.py"
     architectural_paths:
@@ -107,6 +114,17 @@ gates:
     description: No credentials, tokens, or secrets committed.
     command: "{{SECRET_SCAN_CMD}}"   # wire to your scanner (e.g. gitleaks) during seed build
     required: true
+
+  - id: code-security
+    type: code_security
+    description: Product code passes SAST + dependency (SCA) + in-code secret scanning (ADR-0010).
+    required: true
+    fail_closed: true
+    policy: "security/code-security-policy.md"
+    sast_command: "{{SAST_CMD}}"     # wire during seed build
+    sca_command: "{{SCA_CMD}}"       # dependency / known-vulnerability audit
+    block_severity: ${thresholds.code_security_block_severity}
+    max_high_severity_findings: ${thresholds.max_high_severity_security_events}
 
   - id: assurance-artifacts-present
     type: artifact_presence
@@ -165,6 +183,29 @@ gates:
     required: true
     contract: "tools/coding-effector-contract.md"
     sandbox: "tools/coding-effector-sandbox.yaml"
+
+  - id: spec-test-verification
+    type: spec_verification
+    description: >
+      Risk/cost-gated independent review of the TaskSpec and acceptance tests by a
+      different source class BEFORE the effector runs; all effector tasks require
+      negative/property tests and a spec intent restatement (ADR-0014).
+    required: true
+    contract: "tools/coding-effector-contract.md"
+    require_review_above_cost_usd: ${thresholds.spec_review_required_above_cost_usd}
+    require_review_when: [irreversible, externally_visible, phase_2_product]
+    require_for_all_tasks: [negative_or_property_tests, spec_intent_restatement]
+    evidence: verification_span
+
+  - id: craft-revalidation
+    type: craft_revalidation
+    description: >
+      On a material model/effector/embedding change, affected skills re-run their
+      evals; regressed skills are quarantined, not retrieved (ADR-0013).
+    required: true
+    schema: "memory/skill-manifest.schema.json"
+    trigger: [model_version_change, effector_version_change, embedding_model_change]
+    on_regression: quarantine
 
   # Journeyman-only: self-modifications must pass the rotating eval harness.
   - id: regression-guard

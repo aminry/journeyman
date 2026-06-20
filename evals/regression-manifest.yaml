@@ -61,6 +61,30 @@ suites:
       - "security/**"
     expected_result: pass_threshold
 
+  - id: code-security
+    class: public_regression
+    path: security/code-security-policy.md
+    required_for_changes:
+      - "src/**"
+      - "project/**"
+    expected_result: no_high_severity_findings
+
+  - id: craft-revalidation
+    class: public_regression
+    path: memory/skill-manifest.schema.json
+    required_for_changes:
+      - "kernel/**"      # model router / capability scores
+      - "tools/**"       # effector version
+      - "memory/**"      # embedding / skill library
+    expected_result: quarantine_regressed_or_pass
+
+  - id: spec-faithfulness
+    class: human_judged
+    path: tools/coding-effector-contract.md
+    required_for_changes:
+      - "tools/coding-effector-contract.md"
+    expected_result: spec_intent_matches
+
 thresholds:
   public_regression_pass_rate: 1.0
   redteam_expected_control_rate: 1.0

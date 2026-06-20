@@ -29,6 +29,15 @@ global_limits:
   max_wall_clock_seconds_per_task: 7200
   max_cost_usd_per_task_without_approval: 25
 
+# Registered tools invoked with parameters that do not match a known-safe pattern,
+# or any action whose risk class is ambiguous, escalate to approval rather than
+# executing (ADR-0016). default_action: deny already covers UNregistered tools;
+# this closes the registered-but-used-novelly case.
+ambiguous_action_escalation:
+  enabled: true
+  on_unmatched_safe_pattern: require_approval
+  on_ambiguous_risk_class: require_approval
+
 tools:
   read_file:
     risk: low
