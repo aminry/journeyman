@@ -151,6 +151,29 @@ def _summary_md(result: OrchestratorResult) -> str:
         )
     lines += [
         "",
+        "## Selectivity — did the driver incorporate selectively or dump all retrieved?",
+        "| task | retrieved | incorporated | incorp/retrieved | incorp∩gold prec | "
+        "incorp∩gold recall |",
+        "|--|--|--|--|--|--|",
+    ]
+    for a in result.tasks:
+        d = a.diagnostic
+        sel = "—" if not a.retrieved else f"{d.incorporation_precision:.2f}"
+        gp = (
+            "—"
+            if d.incorporation_curated_precision is None
+            else f"{d.incorporation_curated_precision:.2f}"
+        )
+        gr = (
+            "—"
+            if d.incorporation_curated_recall is None
+            else f"{d.incorporation_curated_recall:.2f}"
+        )
+        lines.append(
+            f"| {a.record['task_id']} | {a.retrieved} | {a.reused} | {sel} | {gp} | {gr} |"
+        )
+    lines += [
+        "",
         "## Retrieval-precision diagnostic (G2)",
         f"```json\n{json.dumps(result.diagnostic_summary, indent=2)}\n```",
         "",

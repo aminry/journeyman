@@ -71,10 +71,16 @@ class RetrievalDiagnostic:
     auto_recall: float | None
     diverges: bool
     divergence: list[str]
-    # retrieved-vs-incorporated
+    # retrieved-vs-incorporated (selective vs dump-all)
     n_retrieved: int
     n_incorporated: int
     incorporation_precision: float
+    # the driver's INCORPORATION judgment vs the gold (the decisive metric once k = full
+    # library and retrieval recall saturates): of what the driver wove in, how much was
+    # gold-relevant (precision), and of the gold-relevant present craft, how much did it
+    # weave in (recall). None when undefined (nothing incorporated / no gold present).
+    incorporation_curated_precision: float | None
+    incorporation_curated_recall: float | None
 
 
 def retrieval_diagnostic(
@@ -87,8 +93,12 @@ def retrieval_diagnostic(
     present_ids: set[str],
 ) -> RetrievalDiagnostic:
     retrieved = set(retrieved_ids)
+    incorporated = set(incorporated_ids)
     curated = set(gold.curated_relevant(instance_id)) & present_ids
     auto = auto_relevant_craft_ids(feature_tags) & present_ids
+
+    inc_prec = len(incorporated & curated) / len(incorporated) if incorporated else None
+    inc_rec = len(incorporated & curated) / len(curated) if curated else None
 
     return RetrievalDiagnostic(
         instance_id=instance_id,
@@ -106,6 +116,8 @@ def retrieval_diagnostic(
         incorporation_precision=(
             len(incorporated_ids) / len(retrieved_ids) if retrieved_ids else 0.0
         ),
+        incorporation_curated_precision=inc_prec,
+        incorporation_curated_recall=inc_rec,
     )
 
 
@@ -114,13 +126,28 @@ def summarize_diagnostics(diags: list[RetrievalDiagnostic]) -> dict:
     metric is defined (relevant craft was present)."""
     curated_recalls = [d.curated_recall for d in diags if d.curated_recall is not None]
     auto_recalls = [d.auto_recall for d in diags if d.auto_recall is not None]
+    inc_precs = [
+        d.incorporation_curated_precision
+        for d in diags
+        if d.incorporation_curated_precision is not None
+    ]
+    inc_recs = [
+        d.incorporation_curated_recall for d in diags if d.incorporation_curated_recall is not None
+    ]
     mean = lambda xs: round(sum(xs) / len(xs), 6) if xs else None  # noqa: E731
     return {
         "positions": len(diags),
         "mean_curated_recall": mean(curated_recalls),
         "mean_auto_recall": mean(auto_recalls),
         "mean_curated_precision": mean([d.curated_precision for d in diags]),
+        # selective-vs-dump: incorporated / retrieved (1.0 = dumped all retrieved)
         "mean_incorporation_precision": mean([d.incorporation_precision for d in diags]),
+        # the driver's judgment vs the gold (decisive once k = full library)
+        "mean_incorporation_curated_precision": mean(inc_precs),
+        "mean_incorporation_curated_recall": mean(inc_recs),
         "divergent_positions": sum(1 for d in diags if d.diverges),
         "per_position_curated_recall": [d.curated_recall for d in diags],
+        "per_position_incorporation_curated_recall": [
+            d.incorporation_curated_recall for d in diags
+        ],
     }

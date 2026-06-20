@@ -17,9 +17,11 @@
 #   * rule recipes (hard) — one per business rule ACTUALLY present in the frozen spec
 #     (taskset.json rule:* tags = the compiled corpus), so the key matches what is built.
 #
-# Status: DRAFT pending operator/advisor sign-off (ADR-0014 independence — the retriever
-# is not graded against its own author's unilateral key). Freeze on sign-off, before the
-# run. Provenance: experiments/phase_minus_1/{domain.md §4, instances/manifest.md,
+# Status: FROZEN / APPROVED 2026-06-20 — operator verified line-by-line against the frozen
+# taskset (rule recipes match all 10 hard instances incl. coupons=cross_field-only and
+# inventory's same-row computed_field). No post-hoc edits after seeing retrieval results
+# (ADR-0014 independence — the retriever is not graded against its own author's key).
+# Provenance: experiments/phase_minus_1/{domain.md §4, instances/manifest.md,
 # taskset.json (protocol v3)}.
 taxonomy:
   universal:

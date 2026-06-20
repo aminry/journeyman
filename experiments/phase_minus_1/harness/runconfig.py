@@ -51,8 +51,16 @@ class RunConfig:
     # at first download and frozen thereafter (local, deterministic, zero per-call cost).
     embedding_revision: str | None = None
     sentence_transformers_version: str | None = None
+    torch_version: str | None = None
     embedding_normalize: bool = True
     embedding_similarity: str = "cosine"
+    # k = the craft library size (the full taxonomy, ~13), NOT a small constant. At k=5
+    # every medium (8 relevant) / hard (up to 11) instance is capped — it caps the reuse
+    # counter at 5 and G2 recall at ~0.45 once the library fills (positions ~15-30), which
+    # the cold-start pilot can't reveal. With k=full-library nothing relevant is dropped,
+    # so G2 measures the driver's INCORPORATION judgment vs the gold, not retrieval cap
+    # artifacts (operator decision T-1.3; see ADR-0023). Revisit if the library ever grows
+    # past the taxonomy (a driver inventing novel craft ids).
     retrieval_k: int = 5
     embedding_query_prefix: str = "Represent this sentence for searching relevant passages:"
     # Effector invocation template. {prompt} is substituted by render_effector_command.
@@ -150,6 +158,7 @@ class RunConfig:
                 "model_id": self.embedding_model,
                 "revision": self.embedding_revision,
                 "sentence_transformers_version": self.sentence_transformers_version,
+                "torch_version": self.torch_version,
                 "normalize": self.embedding_normalize,
                 "similarity": self.embedding_similarity,
                 "k": self.retrieval_k,
@@ -180,9 +189,12 @@ def orchestrator_run_config() -> RunConfig:
         driver_fallback_model="claude-haiku-4-5",
         driver_temperature=0.0,
         embedding_model="BAAI/bge-small-en-v1.5",
+        # k = full library size (the 13-item taxonomy), so retrieval never caps the reuse
+        # counter or G2 recall once the library fills (operator decision; see ADR-0023).
+        retrieval_k=13,
         retrieval_config=(
-            "vector retrieval (BAAI/bge-small-en-v1.5, normalized, cosine top-k=5; "
-            "bge query-prefix on the query only); keyword/tag fallback (ADR-0020 §5)"
+            "vector retrieval (BAAI/bge-small-en-v1.5, normalized, cosine top-k=13 = full "
+            "library; bge query-prefix on the query only); keyword/tag fallback (ADR-0020 §5)"
         ),
     )
 

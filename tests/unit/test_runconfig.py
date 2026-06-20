@@ -95,7 +95,8 @@ def test_orchestrator_config_pins_bge_embedding() -> None:
     assert cfg.embedding_model == "BAAI/bge-small-en-v1.5"
     assert cfg.embedding_normalize is True
     assert cfg.embedding_similarity == "cosine"
-    assert cfg.retrieval_k == 5
+    # k = full library size (the 13-item taxonomy), so retrieval never caps reuse / G2
+    assert cfg.retrieval_k == 13
     # bge query-instruction prefix, applied to the QUERY only (operator decision)
     assert cfg.embedding_query_prefix.startswith("Represent this sentence")
 
@@ -112,8 +113,9 @@ def test_orchestrator_to_pins_records_driver_and_embedding() -> None:
     assert emb["model_id"] == "BAAI/bge-small-en-v1.5"
     assert emb["normalize"] is True
     assert emb["similarity"] == "cosine"
-    assert emb["k"] == 5
+    assert emb["k"] == 13
     assert "revision" in emb and "sentence_transformers_version" in emb
+    assert "torch_version" in emb  # recorded at first model load for the pilot
     assert emb["query_prefix"].startswith("Represent this sentence")
     # retrieval_config now names the vector retriever
     assert "vector" in pins["retrieval_config"].lower()

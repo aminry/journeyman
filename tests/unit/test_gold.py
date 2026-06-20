@@ -134,7 +134,43 @@ def test_diagnostic_reports_retrieved_vs_incorporated() -> None:
     )
     assert d.n_retrieved == 2
     assert d.n_incorporated == 1
-    assert d.incorporation_precision == 0.5
+    assert d.incorporation_precision == 0.5  # incorporated / retrieved (selective vs dump)
+
+
+def test_diagnostic_scores_driver_incorporation_judgment_vs_gold() -> None:
+    """At k=full-library, retrieval recall saturates; the real G2 signal is whether the
+    DRIVER incorporated the gold-relevant craft (recall) and avoided the irrelevant
+    (precision). books gold = universals + pagination/unique/sort/filter."""
+    gm = GoldMap.load(GOLD)
+    present = {"crud-spec-template", "pagination-contract", "state-machine-playbook"}
+    # driver incorporated one gold-relevant (crud) + one NOT gold-relevant for books
+    # (state-machine), and missed pagination (gold-relevant, present).
+    d = retrieval_diagnostic(
+        gold=gm,
+        instance_id="books",
+        feature_tags=["tier:medium", "crud", "pagination"],
+        retrieved_ids=["crud-spec-template", "pagination-contract", "state-machine-playbook"],
+        incorporated_ids=["crud-spec-template", "state-machine-playbook"],
+        present_ids=present,
+    )
+    # books gold present = {crud-spec-template, pagination-contract}
+    # incorporated ∩ gold = {crud-spec-template} -> precision 1/2, recall 1/2
+    assert d.incorporation_curated_precision == 0.5
+    assert d.incorporation_curated_recall == 0.5
+
+
+def test_diagnostic_incorporation_vs_gold_undefined_when_nothing_incorporated() -> None:
+    gm = GoldMap.load(GOLD)
+    d = retrieval_diagnostic(
+        gold=gm,
+        instance_id="notes",
+        feature_tags=["tier:easy", "crud"],
+        retrieved_ids=[],
+        incorporated_ids=[],
+        present_ids=set(),
+    )
+    assert d.incorporation_curated_precision is None
+    assert d.incorporation_curated_recall is None
 
 
 def test_summarize_reports_mean_per_position_recall() -> None:

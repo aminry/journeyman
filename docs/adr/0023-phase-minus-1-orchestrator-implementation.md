@@ -85,6 +85,30 @@ Run A only) via the operator's local Anthropic gateway (`ANTHROPIC_BASE_URL` /
 `experiments/phase_minus_1/results/pilot/` as `run_kind=experiment` (distinct from the
 spine's `results/_selftest/`). The full 30×2 run stays gated behind the pilot review.
 
+**9. Retrieval depth `k` = full library size, not a small constant (operator decision,
+gold-map review).** `retrieval_k = 13` (the full craft taxonomy), not 5. At `k=5` every
+medium (8 relevant) and hard (up to 11 relevant) instance is capped once the library
+fills — it would cap the reuse counter at 5 and G2 recall at ~0.45, biting only positions
+~15–30 (the cold-start pilot can't reveal it). With `k = full library`, retrieval never
+drops relevant craft, so **G2's decisive signal becomes the driver's INCORPORATION
+judgment vs the gold** (`incorporation_curated_precision` / `_recall`), not a retrieval-cap
+artifact — the right thing at this scale. `verify_incorporated` confirms a marker is
+present, not selectivity; **selectivity** is read from `incorporation_precision`
+(incorporated ÷ retrieved: 1.0 = the driver dumped all retrieved craft) and its quality
+from incorporation-vs-gold. Per-call cost of the larger `k` is zero (local embedder).
+Revisit only if a driver invents craft ids beyond the taxonomy (library > k). The pin +
+the resolved bge revision, sentence-transformers version, and **torch version** are
+recorded in `pins.embedding`.
+
+**10. Run A continuation rule (stated before the pilot).** On a pilot **PASS**, Run A
+**continues from the pilot's library state** — same `run_id`, same on-disk craft dir,
+positions 4–30, with **no re-run** of positions 1–3 (the craft library persists on disk;
+T-1.4 merges the position records into the single Run A). On a **G1 FAIL** (evidence to
+bump the driver to Opus 4.8), Run A is **restarted as a new `run_id`** with re-pinned
+decoding, and the pilot is **marked superseded** — retained on disk for audit but
+excluded from the T-1.4 analysis (`is_real_experiment_decision` already ignores a
+3-task run; the supersession is recorded in the run's decision rationale).
+
 ## Consequences
 
 - **Positive:** the embedding pin is fully reproducible and zero-cost; reuse is verified
