@@ -14,10 +14,30 @@ thresholds:
   coverage_min_percent: 80
   max_lint_warnings: 0
   max_changed_files_without_adr: 50
+  max_high_severity_security_events: 0
 
 on_fail: block_merge
 on_pass: allow_merge
 report: trace            # each gate result emitted as a dod_gate span on the task trace
+
+assurance_artifacts:
+  phase_minus_1_protocol: "experiments/phase_minus_1/protocol.md"
+  phase_minus_1_taskset_schema: "experiments/phase_minus_1/taskset.schema.json"
+  phase_minus_1_results_schema: "experiments/phase_minus_1/results.schema.json"
+  threat_model: "docs/threat-model.md"
+  tool_policy: "security/tool-policy.yaml"
+  approval_policy: "security/approval-policy.md"
+  approval_record_schema: "security/approval-record.schema.json"
+  untrusted_content_pipeline: "security/untrusted-content-pipeline.md"
+  memory_admission_policy: "security/memory-admission-policy.md"
+  data_classification_policy: "security/data-classification-policy.md"
+  eval_governance: "evals/eval-governance.md"
+  regression_manifest: "evals/regression-manifest.yaml"
+  trace_schema: "observability/trace-schema.json"
+  redaction_policy: "observability/redaction-policy.md"
+  retention_policy: "observability/retention-policy.md"
+  effector_contract: "tools/coding-effector-contract.md"
+  effector_sandbox: "tools/coding-effector-sandbox.yaml"
 
 gates:
 
@@ -87,6 +107,64 @@ gates:
     description: No credentials, tokens, or secrets committed.
     command: "{{SECRET_SCAN_CMD}}"   # wire to your scanner (e.g. gitleaks) during seed build
     required: true
+
+  - id: assurance-artifacts-present
+    type: artifact_presence
+    description: Security, eval, experiment, observability, and effector assurance artifacts exist.
+    required: true
+    artifacts: ${assurance_artifacts}
+
+  - id: policy-schema-valid
+    type: schema_validation
+    description: JSON/YAML policy artifacts parse and validate before merge.
+    required: true
+    files:
+      - "security/tool-policy.yaml"
+      - "security/approval-record.schema.json"
+      - "experiments/phase_minus_1/taskset.schema.json"
+      - "experiments/phase_minus_1/results.schema.json"
+      - "observability/trace-schema.json"
+      - "evals/regression-manifest.yaml"
+
+  - id: tool-policy-complete
+    type: tool_policy
+    description: Every registered tool has an explicit allow/deny policy and risk class.
+    required: true
+    registry: "tools/"
+    policy: "security/tool-policy.yaml"
+
+  - id: approval-binding
+    type: approval_policy
+    description: High and critical risk actions require valid, unexpired, parameter-bound approval records.
+    required: true
+    policy: "security/approval-policy.md"
+    schema: "security/approval-record.schema.json"
+
+  - id: redteam-required
+    type: eval_selection
+    description: Prompt, tool, memory, retrieval, approval, and policy changes run matching red-team suites.
+    required: true
+    manifest: "evals/regression-manifest.yaml"
+    suites:
+      - "prompt-injection"
+      - "memory-poisoning"
+      - "tool-abuse"
+      - "approval-bypass"
+
+  - id: trace-redaction
+    type: trace_redaction
+    description: Trace, transcript, and diff artifacts contain no unredacted restricted data.
+    required: true
+    schema: "observability/trace-schema.json"
+    redaction_policy: "observability/redaction-policy.md"
+    max_high_severity_findings: ${thresholds.max_high_severity_security_events}
+
+  - id: effector-evidence
+    type: effector_contract
+    description: Coding effector sessions include sandbox profile, cost, transcript ref, retry count, and diff ref.
+    required: true
+    contract: "tools/coding-effector-contract.md"
+    sandbox: "tools/coding-effector-sandbox.yaml"
 
   # Journeyman-only: self-modifications must pass the rotating eval harness.
   - id: regression-guard

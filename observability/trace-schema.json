@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://journeyman.local/schemas/task-trace.json",
+  "title": "Journeyman Task Trace",
+  "type": "object",
+  "required": ["trace_id", "task_id", "started_at", "spans", "redaction"],
+  "additionalProperties": false,
+  "properties": {
+    "trace_id": {
+      "type": "string",
+      "pattern": "^tr_[A-Za-z0-9_-]+$"
+    },
+    "task_id": { "type": "string" },
+    "started_at": { "type": "string", "format": "date-time" },
+    "completed_at": { "type": "string", "format": "date-time" },
+    "status": {
+      "enum": ["running", "succeeded", "failed", "blocked", "halted"]
+    },
+    "spans": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["span_id", "kind", "started_at", "actor", "redaction_state"],
+        "additionalProperties": false,
+        "properties": {
+          "span_id": {
+            "type": "string",
+            "pattern": "^sp_[A-Za-z0-9_-]+$"
+          },
+          "parent_span_id": { "type": "string" },
+          "kind": {
+            "enum": [
+              "model_call",
+              "tool_call",
+              "store_read",
+              "store_write",
+              "decision",
+              "approval",
+              "dod_gate",
+              "effector_session",
+              "security_event",
+              "cost_check"
+            ]
+          },
+          "actor": { "type": "string" },
+          "started_at": { "type": "string", "format": "date-time" },
+          "completed_at": { "type": "string", "format": "date-time" },
+          "model": { "type": "string" },
+          "tool_name": { "type": "string" },
+          "risk_class": { "enum": ["low", "medium", "high", "critical"] },
+          "approval_id": { "type": "string" },
+          "policy_version": { "type": "integer", "minimum": 1 },
+          "input_ref": { "type": "string" },
+          "output_ref": { "type": "string" },
+          "transcript_ref": { "type": "string" },
+          "diff_ref": { "type": "string" },
+          "sandbox_profile": { "type": "string" },
+          "tokens_in": { "type": "integer", "minimum": 0 },
+          "tokens_out": { "type": "integer", "minimum": 0 },
+          "cost_usd": { "type": "number", "minimum": 0 },
+          "retry_count": { "type": "integer", "minimum": 0 },
+          "decision": { "type": "string" },
+          "source_labels": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "redaction_state": {
+            "enum": ["not_needed", "pending", "redacted", "blocked"]
+          },
+          "details": { "type": "object" }
+        }
+      }
+    },
+    "redaction": {
+      "type": "object",
+      "required": ["policy_version", "scanner_version", "result"],
+      "additionalProperties": false,
+      "properties": {
+        "policy_version": { "type": "integer", "minimum": 1 },
+        "scanner_version": { "type": "string" },
+        "result": { "enum": ["passed", "blocked", "manual_review"] },
+        "findings_count": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "cost_rollup": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "total_cost_usd": { "type": "number", "minimum": 0 },
+        "model_cost_usd": { "type": "number", "minimum": 0 },
+        "effector_cost_usd": { "type": "number", "minimum": 0 },
+        "tool_cost_usd": { "type": "number", "minimum": 0 }
+      }
+    }
+  }
+}
