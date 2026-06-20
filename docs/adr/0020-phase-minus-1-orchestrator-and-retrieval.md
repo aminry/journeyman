@@ -1,17 +1,17 @@
 # ADR-0020: Phase −1 orchestrator (driver loop) + craft retrieval
 
-- **Status:** Proposed (design proposal for review/lock before T-1.3)
+- **Status:** Accepted
 - **Date:** 2026-06-20
-- **Deciders:** Human operator (Amin), Claude Code (Opus 4.8) — *pending lock*
+- **Deciders:** Human operator (Amin), Claude Code (Opus 4.8)
 - **Tags:** experiments, phase-minus-1, orchestration, memory, retrieval, evals
 
-> This is a **design proposal**, not built code. It locks the orchestrator + retrieval
-> design that T-1.3 (Run A + control Run B) is built against. The T-1.1 spine
-> (ADR-0019) deliberately had no driver: craft was hand-seeded and retrieval was
-> keyword/tag. This ADR specifies the driver loop, how external-only competence is
-> enforced, the driver model, what craft is and when it's written, vector retrieval
-> + reuse measurement, and the control run. Genuine forks are flagged with options
-> and a recommendation; the **Decisions to lock** section is the review checklist.
+> This is the **locked design** T-1.3 (Run A + control Run B) is built against — no
+> code yet. The T-1.1 spine (ADR-0019) deliberately had no driver: craft was
+> hand-seeded and retrieval was keyword/tag. This ADR specifies the driver loop, how
+> external-only competence is enforced, the driver model, what craft is and when it's
+> written, vector retrieval + reuse measurement, and the control run. All five forks
+> are resolved in **Locked decisions**; the **Required gates** are hard gates T-1.3/
+> T-1.4 must enforce (not advisories).
 
 ## Context
 
@@ -82,16 +82,25 @@ The driver's job is reasoning-over-text (compose a structured TaskSpec; distill 
 generic playbook), not heavy coding. Driver spend is **`model_cost_usd`**, separate
 from the effector's `effector_cost_usd`; both roll into `total_cost_usd`. The driver
 model is part of craft's `validated_against` (ADR-0013) alongside the effector and
-embedding model. **The driver model + its full prompt are pinned identically across
-Run A and Run B** (§6).
+embedding model.
 
-**Fork (driver model) — recommendation: Sonnet 4.6 (primary) + Haiku 4.5 (cheap
-fallback).** Rationale: strong enough for spec composition + reflection, materially
-cheaper than Opus, and keeping the driver cheap makes the compounding signal in
-*total* cost cleaner (reflection cost doesn't swamp effector savings) and the
-economics realistic (SPEC §4: "one model + one cheap fallback"). Alternative: **Opus
-4.8** for best reflection quality if a pilot triplet shows Sonnet produces weak or
-over-fit craft — escalate then, don't start there. (The effector stays Opus 4.8.)
+**Pinned identically across Run A and Run B** (§6): the driver model, its full
+prompt, **and its decoding settings**. Pin the driver's **sampling params** with the
+model and record them in `pins.driver` — for the Sonnet 4.6 driver, **`temperature ≈
+0`** (one sampling param, per Claude-4 rules) for reproducible composition/reflection.
+(If escalated to Opus 4.8, which removes sampling params, pin adaptive-thinking +
+`effort` instead and record those.) **Always report the effector-cost slope alongside
+the total-cost slope** so a rising driver cost can never mask a falling effector
+signal (the compounding may show first in effector cost).
+
+**Driver model: Sonnet 4.6 (primary) + Haiku 4.5 (cheap fallback)**, effector stays
+Opus 4.8. Rationale: strong enough for spec composition + reflection, materially
+cheaper than Opus, keeps the *total*-cost signal clean and the economics realistic
+(SPEC §4: "one model + one cheap fallback"). **Hard gate (not advisory):** the
+pilot-triplet craft-quality check (see Required gates) **must** pass before the full
+run — if the first triplet's craft is weak/over-fit **or** reuse ≈ 0 for retrieval
+reasons, **bump the driver to Opus 4.8 (re-pinning its decoding) before the full run**.
+Don't start on Opus; escalate on evidence.
 
 ### 4. Craft items
 
@@ -120,6 +129,18 @@ field names from the spec) in craft bodies; (b) **dedupe** — a WRITE must just
 itself against retrieval of existing craft for the same tags (≈one canonical item
 per feature tag, evolved via UPDATE, not proliferated); (c) **manifest validation**
 against the schema, fail-closed; (d) reflection writes are logged with provenance.
+
+**Craft-impact tracking (harmful-craft detection — required).** The mandatory
+control run (§6) catches *absent* craft (craft adds nothing), but **not *harmful*
+craft** — a bad reflection that writes a misleading playbook which, when reused,
+makes the effector *worse*. So per craft item, track the outcomes of tasks where it
+was **reused**: `mean_effector_retries`, `first_pass_gate_rate`, `uses` (the
+`metrics` block already exists in `memory/skill-manifest.schema.json`), against the
+running baseline. Flag an item as **harmful** when its reuse correlates with *more*
+effector retries / lower first-pass than baseline, and **quarantine** it
+(`status: quarantined` → retrieval skips it, as the library already does) so it can
+be pruned/repaired. This ties to SPEC §9 (skill-library maintenance) and ADR-0013
+(quarantine). T-1.4 reports per-craft impact.
 
 **Fork (granularity) — recommendation: per-feature items (strong).** Alternative is
 one evolving monolithic playbook. Per-feature wins because it is what makes
@@ -169,18 +190,50 @@ richer specs) rather than conflating it with "B skipped reflection." Everything 
 — effector, spec, gate, task order, pricing, pins — is identical. Result: a
 treatment−control delta on the cost slope attributable to **craft**, per ADR-0017.
 
-## Decisions to lock (review checklist)
+## Locked decisions (accepted 2026-06-20)
 
-1. **Reflection trigger** — *Fork.* (A) reflect **every task**; (B) **reflect-on-
-   signal** = reflect only when `effector_retries > 0` OR `first_pass_contract_success`
-   is false OR the task introduced an uncovered feature tag. **Recommend (B)**:
-   captures friction-driven lessons + new-feature coverage while controlling driver
-   cost and library rot; escalate to (A) if early triplets show under-capture.
-2. **Driver model** — **Recommend Sonnet 4.6 + Haiku 4.5 fallback**; Opus 4.8 if a
-   pilot shows weak/over-fit craft.
-3. **Craft granularity** — **Recommend per-feature items** (not a monolith).
-4. **Embedding model** — **Recommend a pinned local model**; hosted as alternative.
-5. **Run B reflection** — **Recommend run-and-discard** (cost parity), not skip.
+1. **Reflection trigger = reflect-on-signal** — reflect only when `effector_retries
+   > 0` OR `first_pass_contract_success` is false OR the task introduced an uncovered
+   feature tag. (Escalate to reflect-every-task only if the pilot shows under-capture.)
+2. **Driver model = Sonnet 4.6** (primary) **+ Haiku 4.5** (cheap fallback); effector
+   stays Opus 4.8. Decoding pinned (`temperature ≈ 0`) and recorded in `pins.driver`.
+   **Escalation to Opus 4.8 is a hard, evidence-triggered gate** (see Required gates).
+3. **Craft granularity = per-feature items** (not a monolith) — keeps reuse measurable.
+4. **Embedding model = a pinned local model** (deterministic, zero per-call cost),
+   recorded in `pins.embedding_model` + craft `validated_against`.
+5. **Run B reflection = run-and-discard** (driver-cost parity with A), not skip.
+
+**Invariants (locked):** (i) fresh driver context per task — only the on-disk craft
+library persists across tasks (no in-context learning); (ii) reuse = retrieved **and
+verified-incorporated** into the TaskSpec (not gameable); (iii) Run A and B share a
+**byte-identical pinned driver model + prompt + decoding**, differing only by whether
+the craft library accumulates and is retrieved.
+
+## Required gates (hard, not advisories)
+
+These **must** be enforced by T-1.3/T-1.4; a failure blocks proceeding to (or
+trusting) the full run:
+
+- **G1 — Pilot-triplet review (before the full run).** Run the first interleaved
+  triplet `[E1, M1, H1]`, then review the craft written and the reuse outcomes. If
+  craft is weak/over-fit/non-generic **or** reuse ≈ 0 for *retrieval* reasons,
+  **bump the driver to Opus 4.8** (re-pin decoding) and/or fix retrieval **before**
+  the full 30-task spend. A broken orchestrator must be caught here, not after the run.
+- **G2 — Retrieval-precision diagnostic (every run).** Log, per task,
+  retrieved-vs-incorporated and an offline retrieval precision/recall on the craft
+  that *should* have matched the instance's features. This is what lets a flat reuse
+  curve be diagnosed as **retrieval miss vs absent compounding** — the decisive
+  false-negative risk (domain.md §6). Required because the control run does **not**
+  separate a retrieval miss from genuinely-absent craft value.
+- **G3 — Craft-impact / harmful-craft gate (every run).** Track per-craft reuse
+  impact (§4) and quarantine harmful items. The control run catches *absent* craft,
+  not *harmful* craft.
+- **G4 — Effector-cost slope reported alongside total-cost slope (every run).** So a
+  rising driver `model_cost_usd` can never mask a falling `effector_cost_usd` signal.
+- **G5 — T-1.4 reuse-trend report + no-headroom flag.** T-1.4 must explicitly report
+  the reuse trend over positions and **flag the `first-pass ≈ 100% / reuse ≈ 0`
+  case** as *no headroom for craft* (the effector is good on its own) — the decisive
+  non-compounding signal (domain.md §6), distinct from a craft-driven improvement.
 
 ## Consequences
 
