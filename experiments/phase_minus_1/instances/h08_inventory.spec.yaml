@@ -1,8 +1,8 @@
 # Phase −1 instance spec — H8 inventory (HARD tier)
-# Business rule: composite_unique(sku, warehouse) — the same SKU may exist in different
-# warehouses, but not twice in one. Single resource (a globally-unique `barcode` is the
-# medium-tier single unique field). pagination + multiple filters + multi-sort.
-# (manifest H8 also describes computed `available = on_hand − reserved` — deferred; ADR-0021.)
+# Business rules: composite_unique(sku, warehouse) — the same SKU may exist in different
+# warehouses, but not twice in one — AND computed_field available = on_hand − reserved
+# (same-row derived; server-computed, read-only). A globally-unique `barcode` is the
+# medium-tier single unique field. pagination + multiple filters + multi-sort.
 
 id: inventory
 title: Inventory service
@@ -19,6 +19,7 @@ resource:
     - { name: warehouse,    type: string,   required: true, min_len: 1, max_len: 40 }
     - { name: on_hand,      type: integer,  required: true, min: 0 }
     - { name: reserved,     type: integer,  required: true, min: 0 }
+    - { name: available,    type: integer,  readonly: true }   # computed: on_hand − reserved
     - { name: category,     type: enum,     required: true, values: [raw, finished, packaging] }
     - { name: active,       type: boolean,  default: true }
     - { name: restocked_at, type: datetime, required: true }
@@ -45,3 +46,7 @@ business_rules:
   - kind: composite_unique
     fields: [sku, warehouse]
     on_conflict: 409
+  - kind: computed_field
+    field: available
+    compute: subtract
+    operands: [on_hand, reserved]

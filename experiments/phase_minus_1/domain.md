@@ -61,6 +61,7 @@ The harness compiles each spec into a black-box `httpx`/`pytest` contract suite 
 | `business_rules.cross_field` | violating combination → 422 |
 | `business_rules.relationship` (`ref`) | create child with non-existent parent → 404/422; cascade/restrict on parent delete as specified |
 | `business_rules.composite_unique` | duplicate of the composite key → 409 |
+| `business_rules.computed_field` | server-derived read-only field reflects its value on create + GET (same-row: derived from sibling fields, e.g. `available = on_hand − reserved`; aggregate: Σ over child rows, e.g. `balance = Σ child.amount`); a client-supplied value is ignored; mutating an operand (PATCH) or a child row (add/delete) and re-GETting **recomputes** it — no stale cache (ADR-0022) |
 
 In addition to the contract suite, the instance must pass its own **Definition-of-Done gate** (the project's unit tests, lint, build, docs-sync, code-graph-fresh). Both must pass for the task to count as done.
 

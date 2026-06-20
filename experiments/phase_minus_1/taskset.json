@@ -1,5 +1,5 @@
 {
-  "protocol_version": "v2",
+  "protocol_version": "v3",
   "domain": "spec-to-crud-service",
   "task_order": [
     {
@@ -77,7 +77,7 @@
         "rule:state_machine",
         "rule:cross_field"
       ],
-      "expected_contract_tests_min": 58
+      "expected_contract_tests_min": 59
     },
     {
       "position": 4,
@@ -155,7 +155,7 @@
         "rule:cross_field",
         "rule:relationship"
       ],
-      "expected_contract_tests_min": 59
+      "expected_contract_tests_min": 60
     },
     {
       "position": 7,
@@ -227,9 +227,10 @@
         "multi-sort",
         "partial-update",
         "second-resource",
-        "rule:relationship"
+        "rule:relationship",
+        "rule:computed_field"
       ],
-      "expected_contract_tests_min": 47
+      "expected_contract_tests_min": 52
     },
     {
       "position": 10,
@@ -457,7 +458,7 @@
         "partial-update",
         "rule:cross_field"
       ],
-      "expected_contract_tests_min": 51
+      "expected_contract_tests_min": 52
     },
     {
       "position": 19,
@@ -606,9 +607,10 @@
         "sort",
         "multi-sort",
         "partial-update",
-        "rule:composite_unique"
+        "rule:composite_unique",
+        "rule:computed_field"
       ],
-      "expected_contract_tests_min": 55
+      "expected_contract_tests_min": 59
     },
     {
       "position": 25,
@@ -686,7 +688,7 @@
         "rule:cross_field",
         "rule:relationship"
       ],
-      "expected_contract_tests_min": 53
+      "expected_contract_tests_min": 54
     },
     {
       "position": 28,
@@ -761,9 +763,10 @@
         "partial-update",
         "second-resource",
         "rule:state_machine",
-        "rule:relationship"
+        "rule:relationship",
+        "rule:computed_field"
       ],
-      "expected_contract_tests_min": 56
+      "expected_contract_tests_min": 61
     }
   ]
 }
