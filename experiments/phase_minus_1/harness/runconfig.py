@@ -24,7 +24,7 @@ _TOKEN_PRICES = {
 
 @dataclass
 class RunConfig:
-    protocol_version: str = "v1"
+    protocol_version: str = "v2"  # v2: results.schema run_kind amendment (see CHANGELOG.md)
     effector_model: str = "claude-opus-4-8"
     fallback_model: str = "claude-haiku-4-5"
     # The effector here is Claude Code CLI driven in headless mode (ADR-0005).
