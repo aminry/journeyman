@@ -1,0 +1,70 @@
+# Phase −1 retrieval gold map — the curated G2 diagnostic key (ADR-0020 G2).
+#
+# PRE-REGISTERED. This is the *independent* ground truth for "which craft SHOULD be
+# retrieved for each instance", used to diagnose a flat reuse curve as a RETRIEVAL MISS
+# vs ABSENT COMPOUNDING (the decisive false negative, domain.md §6). It is deliberately
+# NOT derived from the retriever: relevance is read off the corpus + the domain feature
+# ladder, then keyed to the craft TAXONOMY (the ~13 per-feature items, ADR-0020 §4) and
+# resolved to concrete craft ids at runtime.
+#
+# Authoring rule (frozen; no post-hoc edits after seeing retrieval results):
+#   * universals — relevant to EVERY instance because every spec has required fields (→
+#     validation), a server-managed id (→ server-managed fields), and is a CRUD service
+#     on the fixed stack (crud-spec-template, fastapi-sqlite-scaffold). These match no
+#     *distinguishing* feature tag, which is exactly why the auto feature-tag map (the
+#     cross-check) misses them and this curated map is the primary key.
+#   * list items (medium + hard) — pagination/unique/sort/filter, per domain.md §4.
+#   * rule recipes (hard) — one per business rule ACTUALLY present in the frozen spec
+#     (taskset.json rule:* tags = the compiled corpus), so the key matches what is built.
+#
+# Status: DRAFT pending operator/advisor sign-off (ADR-0014 independence — the retriever
+# is not graded against its own author's unilateral key). Freeze on sign-off, before the
+# run. Provenance: experiments/phase_minus_1/{domain.md §4, instances/manifest.md,
+# taskset.json (protocol v3)}.
+taxonomy:
+  universal:
+    - crud-spec-template
+    - fastapi-sqlite-scaffold
+    - validation-422-shape
+    - server-managed-fields-recipe
+  feature_keyed:
+    - pagination-contract
+    - unique-409-recipe
+    - sort-contract
+    - filter-contract
+    - state-machine-playbook
+    - cross-field-rule-recipe
+    - relationship-ref-recipe
+    - composite-unique-recipe
+    - computed-field-recipe
+instances:
+  notes: [crud-spec-template, fastapi-sqlite-scaffold, validation-422-shape, server-managed-fields-recipe]
+  books: [crud-spec-template, fastapi-sqlite-scaffold, validation-422-shape, server-managed-fields-recipe, pagination-contract, unique-409-recipe, sort-contract, filter-contract]
+  orders: [crud-spec-template, fastapi-sqlite-scaffold, validation-422-shape, server-managed-fields-recipe, pagination-contract, unique-409-recipe, sort-contract, filter-contract, state-machine-playbook, cross-field-rule-recipe]
+  bookmarks: [crud-spec-template, fastapi-sqlite-scaffold, validation-422-shape, server-managed-fields-recipe]
+  products: [crud-spec-template, fastapi-sqlite-scaffold, validation-422-shape, server-managed-fields-recipe, pagination-contract, unique-409-recipe, sort-contract, filter-contract]
+  reservations: [crud-spec-template, fastapi-sqlite-scaffold, validation-422-shape, server-managed-fields-recipe, pagination-contract, unique-409-recipe, sort-contract, filter-contract, cross-field-rule-recipe, relationship-ref-recipe]
+  tags: [crud-spec-template, fastapi-sqlite-scaffold, validation-422-shape, server-managed-fields-recipe]
+  customers: [crud-spec-template, fastapi-sqlite-scaffold, validation-422-shape, server-managed-fields-recipe, pagination-contract, unique-409-recipe, sort-contract, filter-contract]
+  accounts: [crud-spec-template, fastapi-sqlite-scaffold, validation-422-shape, server-managed-fields-recipe, pagination-contract, unique-409-recipe, sort-contract, filter-contract, relationship-ref-recipe, computed-field-recipe]
+  todos: [crud-spec-template, fastapi-sqlite-scaffold, validation-422-shape, server-managed-fields-recipe]
+  events: [crud-spec-template, fastapi-sqlite-scaffold, validation-422-shape, server-managed-fields-recipe, pagination-contract, unique-409-recipe, sort-contract, filter-contract]
+  projects: [crud-spec-template, fastapi-sqlite-scaffold, validation-422-shape, server-managed-fields-recipe, pagination-contract, unique-409-recipe, sort-contract, filter-contract, relationship-ref-recipe]
+  snippets: [crud-spec-template, fastapi-sqlite-scaffold, validation-422-shape, server-managed-fields-recipe]
+  articles: [crud-spec-template, fastapi-sqlite-scaffold, validation-422-shape, server-managed-fields-recipe, pagination-contract, unique-409-recipe, sort-contract, filter-contract]
+  playlists: [crud-spec-template, fastapi-sqlite-scaffold, validation-422-shape, server-managed-fields-recipe, pagination-contract, unique-409-recipe, sort-contract, filter-contract, relationship-ref-recipe, composite-unique-recipe]
+  measurements: [crud-spec-template, fastapi-sqlite-scaffold, validation-422-shape, server-managed-fields-recipe]
+  vehicles: [crud-spec-template, fastapi-sqlite-scaffold, validation-422-shape, server-managed-fields-recipe, pagination-contract, unique-409-recipe, sort-contract, filter-contract]
+  coupons: [crud-spec-template, fastapi-sqlite-scaffold, validation-422-shape, server-managed-fields-recipe, pagination-contract, unique-409-recipe, sort-contract, filter-contract, cross-field-rule-recipe]
+  countries: [crud-spec-template, fastapi-sqlite-scaffold, validation-422-shape, server-managed-fields-recipe]
+  recipes: [crud-spec-template, fastapi-sqlite-scaffold, validation-422-shape, server-managed-fields-recipe, pagination-contract, unique-409-recipe, sort-contract, filter-contract]
+  shipments: [crud-spec-template, fastapi-sqlite-scaffold, validation-422-shape, server-managed-fields-recipe, pagination-contract, unique-409-recipe, sort-contract, filter-contract, state-machine-playbook, relationship-ref-recipe]
+  quotes: [crud-spec-template, fastapi-sqlite-scaffold, validation-422-shape, server-managed-fields-recipe]
+  subscriptions: [crud-spec-template, fastapi-sqlite-scaffold, validation-422-shape, server-managed-fields-recipe, pagination-contract, unique-409-recipe, sort-contract, filter-contract]
+  inventory: [crud-spec-template, fastapi-sqlite-scaffold, validation-422-shape, server-managed-fields-recipe, pagination-contract, unique-409-recipe, sort-contract, filter-contract, composite-unique-recipe, computed-field-recipe]
+  habits: [crud-spec-template, fastapi-sqlite-scaffold, validation-422-shape, server-managed-fields-recipe]
+  tickets: [crud-spec-template, fastapi-sqlite-scaffold, validation-422-shape, server-managed-fields-recipe, pagination-contract, unique-409-recipe, sort-contract, filter-contract]
+  appointments: [crud-spec-template, fastapi-sqlite-scaffold, validation-422-shape, server-managed-fields-recipe, pagination-contract, unique-409-recipe, sort-contract, filter-contract, cross-field-rule-recipe, relationship-ref-recipe]
+  feeds: [crud-spec-template, fastapi-sqlite-scaffold, validation-422-shape, server-managed-fields-recipe]
+  venues: [crud-spec-template, fastapi-sqlite-scaffold, validation-422-shape, server-managed-fields-recipe, pagination-contract, unique-409-recipe, sort-contract, filter-contract]
+  invoices: [crud-spec-template, fastapi-sqlite-scaffold, validation-422-shape, server-managed-fields-recipe, pagination-contract, unique-409-recipe, sort-contract, filter-contract, state-machine-playbook, relationship-ref-recipe, computed-field-recipe]
