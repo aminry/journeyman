@@ -38,6 +38,31 @@ class RunConfig:
     # "simple vector retrieval" is swapped in at T-1.3 without touching the runner.
     retrieval_config: str = "flat keyword/tag retrieval (spine); vector retrieval deferred to T-1.3"
     embedding_model: str | None = None
+    # --- Driver / orchestrator pins (ADR-0020 §3; T-1.3). None on the spine, which
+    # makes no driver model calls. The orchestrator factory sets these. Pinned
+    # BYTE-IDENTICALLY across Run A and Run B so A-B isolates craft, not decoding.
+    driver_model: str | None = None
+    driver_fallback_model: str | None = None
+    driver_temperature: float = 0.0
+    driver_max_tokens: int = 8000
+    # --- Embedding / vector-retrieval pins (ADR-0020 §5; operator decision T-1.3).
+    # bge query-instruction prefix is applied to the QUERY ONLY (feature tags + spec
+    # digest), never to craft documents. ``embedding_revision`` / version are recorded
+    # at first download and frozen thereafter (local, deterministic, zero per-call cost).
+    embedding_revision: str | None = None
+    sentence_transformers_version: str | None = None
+    torch_version: str | None = None
+    embedding_normalize: bool = True
+    embedding_similarity: str = "cosine"
+    # k = the craft library size (the full taxonomy, ~13), NOT a small constant. At k=5
+    # every medium (8 relevant) / hard (up to 11) instance is capped — it caps the reuse
+    # counter at 5 and G2 recall at ~0.45 once the library fills (positions ~15-30), which
+    # the cold-start pilot can't reveal. With k=full-library nothing relevant is dropped,
+    # so G2 measures the driver's INCORPORATION judgment vs the gold, not retrieval cap
+    # artifacts (operator decision T-1.3; see ADR-0023). Revisit if the library ever grows
+    # past the taxonomy (a driver inventing novel craft ids).
+    retrieval_k: int = 5
+    embedding_query_prefix: str = "Represent this sentence for searching relevant passages:"
     # Effector invocation template. {prompt} is substituted by render_effector_command.
     # Scoped permissions preferred over --dangerously-skip-permissions: the effector
     # already runs in an isolated, network/credential-scoped worktree
@@ -48,6 +73,11 @@ class RunConfig:
     permission_mode: str = "acceptEdits"
     max_turns: int = 60
     budget_cap_usd: float = 10.0
+    # Per-tier per-task budget caps so one pathological instance can't distort the curve
+    # (manifest.md: E≈$3, M≈$5, H≈$8; tuned after the first triplet).
+    tier_budget_caps: dict[str, float] = field(
+        default_factory=lambda: {"easy": 3.0, "medium": 5.0, "hard": 8.0}
+    )
     sandbox_profile: str = "coding-effector-default"
     network_policy: str = (
         "deny-by-default; allowlist PyPI + Anthropic API for the real run (experiment-only)"
@@ -55,7 +85,17 @@ class RunConfig:
 
     @property
     def model_ids(self) -> list[str]:
-        return [self.effector_model, self.fallback_model]
+        """Every pinned model id, de-duped in declaration order (effector first).
+
+        The driver model(s) are included only when a driver is configured (the
+        spine makes no driver calls), so faithful pins record all models actually
+        used without changing the spine's recorded pins.
+        """
+        ids = [self.effector_model, self.fallback_model]
+        for m in (self.driver_model, self.driver_fallback_model):
+            if m and m not in ids:
+                ids.append(m)
+        return ids
 
     def price_for(self, model: str) -> dict[str, float]:
         return self.token_prices.get(model, {"input": 0.0, "output": 0.0})
@@ -63,6 +103,9 @@ class RunConfig:
     def estimate_cost(self, model: str, tokens_in: int, tokens_out: int) -> float:
         p = self.price_for(model)
         return round(tokens_in / 1_000_000 * p["input"] + tokens_out / 1_000_000 * p["output"], 6)
+
+    def budget_cap_for(self, tier: str) -> float:
+        return self.tier_budget_caps.get(tier, self.budget_cap_usd)
 
     def render_effector_command(self, prompt: str) -> list[str]:
         return [
@@ -83,7 +126,7 @@ class RunConfig:
 
     def to_pins(self) -> dict[str, Any]:
         """The ``pins`` object recorded into results.json (results.schema.json)."""
-        return {
+        pins: dict[str, Any] = {
             "model_ids": self.model_ids,
             "effector_version": self.effector_version,
             "pricing_snapshot": self.pricing_snapshot,
@@ -100,10 +143,60 @@ class RunConfig:
             "sandbox_profile": self.sandbox_profile,
             "network_policy": self.network_policy,
         }
+        if self.driver_model is not None:
+            pins["driver"] = {
+                "model": self.driver_model,
+                "fallback_model": self.driver_fallback_model,
+                "temperature": self.driver_temperature,
+                "max_tokens": self.driver_max_tokens,
+            }
+        if self.embedding_model is not None:
+            # Full embedding pin (ADR-0020 §5 + operator decision). The compact
+            # ``<id>@<revision>`` string also goes into craft.validated_against,
+            # whose schema only allows a string embedding_model.
+            pins["embedding"] = {
+                "model_id": self.embedding_model,
+                "revision": self.embedding_revision,
+                "sentence_transformers_version": self.sentence_transformers_version,
+                "torch_version": self.torch_version,
+                "normalize": self.embedding_normalize,
+                "similarity": self.embedding_similarity,
+                "k": self.retrieval_k,
+                "query_prefix": self.embedding_query_prefix,
+            }
+        return pins
+
+    def embedding_pin_string(self) -> str:
+        """Compact ``<model>@<revision>`` for craft.validated_against (schema: string)."""
+        if self.embedding_model is None:
+            return "none"
+        if self.embedding_revision:
+            return f"{self.embedding_model}@{self.embedding_revision}"
+        return self.embedding_model
 
 
 def default_run_config() -> RunConfig:
     return RunConfig()
+
+
+def orchestrator_run_config() -> RunConfig:
+    """Run config for the T-1.3 driver loop (ADR-0020): Sonnet 4.6 driver + bge vector
+    retrieval. Effector stays Opus 4.8. Driver decoding (temp 0) is pinned identically
+    for Run A and Run B (the parity invariant); the bge revision + sentence-transformers
+    version are filled in at first model load and frozen for the run."""
+    return RunConfig(
+        driver_model="claude-sonnet-4-6",
+        driver_fallback_model="claude-haiku-4-5",
+        driver_temperature=0.0,
+        embedding_model="BAAI/bge-small-en-v1.5",
+        # k = full library size (the 13-item taxonomy), so retrieval never caps the reuse
+        # counter or G2 recall once the library fills (operator decision; see ADR-0023).
+        retrieval_k=13,
+        retrieval_config=(
+            "vector retrieval (BAAI/bge-small-en-v1.5, normalized, cosine top-k=13 = full "
+            "library; bge query-prefix on the query only); keyword/tag fallback (ADR-0020 §5)"
+        ),
+    )
 
 
 DEFAULT_RUN_CONFIG = default_run_config()

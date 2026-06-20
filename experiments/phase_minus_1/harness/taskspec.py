@@ -23,6 +23,15 @@ from harness.specschema import (
 )
 
 
+def spec_digest(spec: InstanceSpec) -> str:
+    """A short, deterministic text summary of a spec for the retrieval query + the
+    driver's compose call (ADR-0020 §5). Field/rule *kinds*, not held-out test detail."""
+    fields = " ".join(f"{f.name}:{f.type}" for f in spec.resource.fields)
+    rules = " ".join(r.get("kind", "") for r in spec.business_rules) if spec.business_rules else ""
+    related = f" related:{spec.related.resource.name}" if spec.related is not None else ""
+    return f"{spec.title} [{spec.tier}] {spec.resource.path} fields: {fields} rules: {rules}{related}".strip()
+
+
 def api_conventions(spec: InstanceSpec) -> str:
     """Human-readable statement of the conventions the spec leaves open.
 
