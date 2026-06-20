@@ -38,6 +38,25 @@ class RunConfig:
     # "simple vector retrieval" is swapped in at T-1.3 without touching the runner.
     retrieval_config: str = "flat keyword/tag retrieval (spine); vector retrieval deferred to T-1.3"
     embedding_model: str | None = None
+    # --- Driver / orchestrator pins (ADR-0020 §3; T-1.3). None on the spine, which
+    # makes no driver model calls. The orchestrator factory sets these. Pinned
+    # BYTE-IDENTICALLY across Run A and Run B so A-B isolates craft, not decoding.
+    driver_model: str | None = None
+    driver_fallback_model: str | None = None
+    driver_temperature: float = 0.0
+    driver_max_tokens: int = 8000
+    # --- Embedding / vector-retrieval pins (ADR-0020 §5; operator decision T-1.3).
+    # bge query-instruction prefix is applied to the QUERY ONLY (feature tags + spec
+    # digest), never to craft documents. ``embedding_revision`` / version are recorded
+    # at first download and frozen thereafter (local, deterministic, zero per-call cost).
+    embedding_revision: str | None = None
+    sentence_transformers_version: str | None = None
+    embedding_normalize: bool = True
+    embedding_similarity: str = "cosine"
+    retrieval_k: int = 5
+    embedding_query_prefix: str = (
+        "Represent this sentence for searching relevant passages:"
+    )
     # Effector invocation template. {prompt} is substituted by render_effector_command.
     # Scoped permissions preferred over --dangerously-skip-permissions: the effector
     # already runs in an isolated, network/credential-scoped worktree
@@ -55,7 +74,17 @@ class RunConfig:
 
     @property
     def model_ids(self) -> list[str]:
-        return [self.effector_model, self.fallback_model]
+        """Every pinned model id, de-duped in declaration order (effector first).
+
+        The driver model(s) are included only when a driver is configured (the
+        spine makes no driver calls), so faithful pins record all models actually
+        used without changing the spine's recorded pins.
+        """
+        ids = [self.effector_model, self.fallback_model]
+        for m in (self.driver_model, self.driver_fallback_model):
+            if m and m not in ids:
+                ids.append(m)
+        return ids
 
     def price_for(self, model: str) -> dict[str, float]:
         return self.token_prices.get(model, {"input": 0.0, "output": 0.0})
@@ -83,7 +112,7 @@ class RunConfig:
 
     def to_pins(self) -> dict[str, Any]:
         """The ``pins`` object recorded into results.json (results.schema.json)."""
-        return {
+        pins: dict[str, Any] = {
             "model_ids": self.model_ids,
             "effector_version": self.effector_version,
             "pricing_snapshot": self.pricing_snapshot,
@@ -100,10 +129,56 @@ class RunConfig:
             "sandbox_profile": self.sandbox_profile,
             "network_policy": self.network_policy,
         }
+        if self.driver_model is not None:
+            pins["driver"] = {
+                "model": self.driver_model,
+                "fallback_model": self.driver_fallback_model,
+                "temperature": self.driver_temperature,
+                "max_tokens": self.driver_max_tokens,
+            }
+        if self.embedding_model is not None:
+            # Full embedding pin (ADR-0020 §5 + operator decision). The compact
+            # ``<id>@<revision>`` string also goes into craft.validated_against,
+            # whose schema only allows a string embedding_model.
+            pins["embedding"] = {
+                "model_id": self.embedding_model,
+                "revision": self.embedding_revision,
+                "sentence_transformers_version": self.sentence_transformers_version,
+                "normalize": self.embedding_normalize,
+                "similarity": self.embedding_similarity,
+                "k": self.retrieval_k,
+                "query_prefix": self.embedding_query_prefix,
+            }
+        return pins
+
+    def embedding_pin_string(self) -> str:
+        """Compact ``<model>@<revision>`` for craft.validated_against (schema: string)."""
+        if self.embedding_model is None:
+            return "none"
+        if self.embedding_revision:
+            return f"{self.embedding_model}@{self.embedding_revision}"
+        return self.embedding_model
 
 
 def default_run_config() -> RunConfig:
     return RunConfig()
+
+
+def orchestrator_run_config() -> RunConfig:
+    """Run config for the T-1.3 driver loop (ADR-0020): Sonnet 4.6 driver + bge vector
+    retrieval. Effector stays Opus 4.8. Driver decoding (temp 0) is pinned identically
+    for Run A and Run B (the parity invariant); the bge revision + sentence-transformers
+    version are filled in at first model load and frozen for the run."""
+    return RunConfig(
+        driver_model="claude-sonnet-4-6",
+        driver_fallback_model="claude-haiku-4-5",
+        driver_temperature=0.0,
+        embedding_model="BAAI/bge-small-en-v1.5",
+        retrieval_config=(
+            "vector retrieval (BAAI/bge-small-en-v1.5, normalized, cosine top-k=5; "
+            "bge query-prefix on the query only); keyword/tag fallback (ADR-0020 §5)"
+        ),
+    )
 
 
 DEFAULT_RUN_CONFIG = default_run_config()
