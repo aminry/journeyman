@@ -1,0 +1,38 @@
+# Phase −1 instance spec — M5 articles (MEDIUM tier)
+# Full CRUD incl. partial PATCH; unique slug (→409); enum + datetime + bool-default;
+# list with pagination + two filters + sort.
+
+id: articles
+title: Articles service
+tier: medium
+
+resource:
+  name: article
+  path: /articles
+  fields:
+    - { name: id,           type: uuid,     generated: true, readonly: true }
+    - { name: title,        type: string,   required: true, min_len: 1, max_len: 200 }
+    - { name: slug,         type: string,   required: true, unique: true, pattern: '^[a-z0-9-]+$' }
+    - { name: status,       type: enum,     required: true, values: [draft, published, archived] }
+    - { name: author_id,    type: uuid,     required: true }
+    - { name: published_at, type: datetime, required: true }
+    - { name: pinned,       type: boolean,  default: false }
+
+endpoints:
+  create: { method: POST,   path: /articles,      success: 201 }
+  get:    { method: GET,    path: "/articles/{id}", success: 200, missing: 404 }
+  list:
+    method: GET
+    path: /articles
+    success: 200
+    pagination: { limit_param: limit, offset_param: offset, default_limit: 20, max_limit: 100 }
+    filters: [status, author_id]
+    sort: [published_at]
+  update: { method: PATCH,  path: "/articles/{id}", success: 200, missing: 404, partial: true }
+  delete: { method: DELETE, path: "/articles/{id}", success: 204, missing: 404 }
+
+rules:
+  on_validation_error: 422
+  on_unique_conflict: 409
+
+business_rules: []

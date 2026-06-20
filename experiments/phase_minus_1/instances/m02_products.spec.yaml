@@ -1,0 +1,39 @@
+# Phase −1 instance spec — M2 products (MEDIUM tier)
+# Full CRUD incl. partial PATCH; one unique field (sku → 409); enum + datetime + bool-default;
+# list with pagination + filters + sort. Drives the effector AND the held-out suite.
+
+id: products
+title: Products catalog service
+tier: medium
+
+resource:
+  name: product
+  path: /products
+  fields:
+    - { name: id,          type: uuid,     generated: true, readonly: true }
+    - { name: created_at,  type: datetime, generated: true, readonly: true }
+    - { name: name,        type: string,   required: true, min_len: 1, max_len: 120 }
+    - { name: sku,         type: string,   required: true, unique: true, pattern: '^[0-9]{8}$' }
+    - { name: category,    type: enum,     required: true, values: [electronics, books, home, toys] }
+    - { name: price_cents, type: integer,  required: true, min: 0 }
+    - { name: active,      type: boolean,  default: true }
+
+endpoints:
+  create: { method: POST,   path: /products,      success: 201 }
+  get:    { method: GET,    path: "/products/{id}", success: 200, missing: 404 }
+  list:
+    method: GET
+    path: /products
+    success: 200
+    pagination: { limit_param: limit, offset_param: offset, default_limit: 20, max_limit: 100 }
+    filters: [category, active]
+    sort: [price_cents]
+  update: { method: PATCH,  path: "/products/{id}", success: 200, missing: 404, partial: true }
+  delete: { method: DELETE, path: "/products/{id}", success: 204, missing: 404 }
+
+rules:
+  on_validation_error: 422
+  on_unique_conflict: 409
+  timestamps_immutable: true
+
+business_rules: []

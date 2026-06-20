@@ -1,0 +1,26 @@
+# Phase −1 instance spec — E9 habits (EASY tier)
+# Scalars only; integer range + string length validation; create/get/list/delete.
+
+id: habits
+title: Habits service
+tier: easy
+
+resource:
+  name: habit
+  path: /habits
+  fields:
+    - { name: id,              type: uuid,    generated: true, readonly: true }
+    - { name: name,            type: string,  required: true, min_len: 1, max_len: 80 }
+    - { name: target_per_week, type: integer, required: true, min: 1, max: 21 }
+
+endpoints:
+  create: { method: POST,   path: /habits,      success: 201 }
+  get:    { method: GET,    path: "/habits/{id}", success: 200, missing: 404 }
+  list:   { method: GET,    path: /habits,      success: 200 }
+  delete: { method: DELETE, path: "/habits/{id}", success: 204, missing: 404 }
+
+rules:
+  on_validation_error: 422
+  on_unique_conflict: 409
+
+business_rules: []

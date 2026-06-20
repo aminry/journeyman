@@ -1,0 +1,38 @@
+# Phase −1 instance spec — M8 subscriptions (MEDIUM tier)
+# Full CRUD incl. partial PATCH; unique external_id (→409); enum + datetime + bool-default;
+# list with pagination + two filters + sort (by a client-set datetime).
+
+id: subscriptions
+title: Subscriptions service
+tier: medium
+
+resource:
+  name: subscription
+  path: /subscriptions
+  fields:
+    - { name: id,          type: uuid,     generated: true, readonly: true }
+    - { name: created_at,  type: datetime, generated: true, readonly: true }
+    - { name: external_id, type: string,   required: true, unique: true, pattern: '^[a-z0-9-]+$' }
+    - { name: plan,        type: enum,     required: true, values: [basic, standard, premium] }
+    - { name: renews_at,   type: datetime, required: true }
+    - { name: active,      type: boolean,  default: true }
+
+endpoints:
+  create: { method: POST,   path: /subscriptions,      success: 201 }
+  get:    { method: GET,    path: "/subscriptions/{id}", success: 200, missing: 404 }
+  list:
+    method: GET
+    path: /subscriptions
+    success: 200
+    pagination: { limit_param: limit, offset_param: offset, default_limit: 20, max_limit: 100 }
+    filters: [plan, active]
+    sort: [renews_at]
+  update: { method: PATCH,  path: "/subscriptions/{id}", success: 200, missing: 404, partial: true }
+  delete: { method: DELETE, path: "/subscriptions/{id}", success: 204, missing: 404 }
+
+rules:
+  on_validation_error: 422
+  on_unique_conflict: 409
+  timestamps_immutable: true
+
+business_rules: []

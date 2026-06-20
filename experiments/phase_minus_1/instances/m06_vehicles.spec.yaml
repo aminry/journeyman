@@ -1,0 +1,39 @@
+# Phase −1 instance spec — M6 vehicles (MEDIUM tier)
+# Full CRUD incl. partial PATCH; unique vin (→409); enum + datetime + bool-default;
+# list with pagination + two filters + sort.
+
+id: vehicles
+title: Vehicles service
+tier: medium
+
+resource:
+  name: vehicle
+  path: /vehicles
+  fields:
+    - { name: id,         type: uuid,     generated: true, readonly: true }
+    - { name: created_at, type: datetime, generated: true, readonly: true }
+    - { name: make,       type: string,   required: true, min_len: 1, max_len: 80 }
+    - { name: vin,        type: string,   required: true, unique: true, pattern: '^[0-9]{17}$' }
+    - { name: type,       type: enum,     required: true, values: [sedan, suv, truck, van] }
+    - { name: year,       type: integer,  required: true, min: 1900, max: 2026 }
+    - { name: available,  type: boolean,  default: true }
+
+endpoints:
+  create: { method: POST,   path: /vehicles,      success: 201 }
+  get:    { method: GET,    path: "/vehicles/{id}", success: 200, missing: 404 }
+  list:
+    method: GET
+    path: /vehicles
+    success: 200
+    pagination: { limit_param: limit, offset_param: offset, default_limit: 20, max_limit: 100 }
+    filters: [type, available]
+    sort: [year]
+  update: { method: PATCH,  path: "/vehicles/{id}", success: 200, missing: 404, partial: true }
+  delete: { method: DELETE, path: "/vehicles/{id}", success: 204, missing: 404 }
+
+rules:
+  on_validation_error: 422
+  on_unique_conflict: 409
+  timestamps_immutable: true
+
+business_rules: []
