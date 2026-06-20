@@ -259,6 +259,81 @@ def test_anthropic_reflect_rejects_leaky_craft_as_skip() -> None:
     assert "leak" in res.rationale.lower()
 
 
+def test_anthropic_reflect_write_builds_generic_schema_valid_craft(tmp_path: Path) -> None:
+    spec = load_spec(BOOKS)
+    clean = {
+        "action": "WRITE",
+        "craft_id": "list-default-window-recipe",
+        "summary": "Apply the default page window when none is supplied.",
+        "when_to_use": "When the list endpoint declares a default window.",
+        "body": "Return the configured default window when no window is requested; cap it.",
+        "tags": ["pagination"],
+        "rationale": "new generic lesson",
+    }
+    drv = AnthropicDriver(
+        model="claude-sonnet-4-6",
+        fallback_model="claude-haiku-4-5",
+        temperature=0.0,
+        validated_against=VA,
+        last_validated="2026-06-20T00:00:00Z",
+        client=_FakeClient(_Resp("submit_reflection", clean), {}),
+    )
+    res = drv.reflect(
+        spec=spec,
+        feature_tags=["pagination"],
+        retrieved=[],
+        incorporated=[],
+        gate=PASS,
+        library=CraftLibrary(tmp_path / "lib"),
+    )
+    assert res.action == "WRITE"
+    assert res.craft_item is not None and res.craft_item.id == "list-default-window-recipe"
+    assert res.craft_item.generic is True
+    assert "claude-sonnet-4-6" in res.craft_item.validated_against["models"]
+    CraftLibrary(tmp_path / "lib2").write(res.craft_item)  # schema-valid + writable
+
+
+def test_anthropic_reflect_update_bumps_existing_version(tmp_path: Path) -> None:
+    lib = CraftLibrary(tmp_path / "lib")
+    lib.write(_pag_item())  # pagination-contract @ 1.0.0
+    spec = load_spec(BOOKS)
+    upd = {
+        "action": "UPDATE",
+        "target_id": "pagination-contract",
+        "summary": "Refined pagination contract.",
+        "when_to_use": "When the list endpoint declares pagination.",
+        "body": "Honor the window params; cap the page size; keep a stable total ordering.",
+        "tags": ["pagination"],
+        "rationale": "effector still missed the cap",
+    }
+    failed = GateOutcome(
+        contract_passed=False,
+        dod_passed=True,
+        effector_retries=1,
+        first_pass=False,
+        failing_case_ids=["pagination:max_limit"],
+    )
+    drv = AnthropicDriver(
+        model="claude-sonnet-4-6",
+        fallback_model="claude-haiku-4-5",
+        temperature=0.0,
+        validated_against=VA,
+        last_validated="2026-06-20T00:00:00Z",
+        client=_FakeClient(_Resp("submit_reflection", upd), {}),
+    )
+    res = drv.reflect(
+        spec=spec,
+        feature_tags=["pagination"],
+        retrieved=[_pag_item()],
+        incorporated=["pagination-contract"],
+        gate=failed,
+        library=lib,
+    )
+    assert res.action == "UPDATE"
+    assert res.target_id == "pagination-contract"
+    assert res.craft_item is not None and res.craft_item.version == "1.0.1"
+
+
 def test_anthropic_falls_back_to_haiku_and_records_it(tmp_path: Path) -> None:
     spec = load_spec(BOOKS)
     rec: dict = {}
