@@ -171,7 +171,25 @@ class CompositeUniqueRule:
     on_conflict: int = 409
 
 
-BusinessRule = StateMachineRule | CrossFieldRule | RelationshipRule | CompositeUniqueRule
+@dataclass(frozen=True)
+class ComputedFieldRule:
+    """A server-derived (read-only) field — the read-side dimension (ADR-0022).
+
+    * ``subtract``: ``field = operands[0] - operands[1]`` (same-row).
+    * ``sum_children``: ``field = Σ over child rows of Π(child_fields)`` — i.e. the sum,
+      over every ``child`` row referencing this parent, of the product of ``child_fields``.
+    """
+
+    field: str
+    compute: str  # subtract | sum_children
+    operands: tuple[str, ...] = ()  # subtract: (a, b)
+    child: str | None = None  # sum_children: the related child resource name
+    child_fields: tuple[str, ...] = ()  # sum_children: product of these per child, then summed
+
+
+BusinessRule = (
+    StateMachineRule | CrossFieldRule | RelationshipRule | CompositeUniqueRule | ComputedFieldRule
+)
 
 
 @dataclass(frozen=True)
@@ -232,6 +250,25 @@ def parse_business_rule(raw: dict) -> BusinessRule:
             raise SpecError("business_rule.composite_unique requires at least two fields")
         return CompositeUniqueRule(
             fields=tuple(fields), on_conflict=int(raw.get("on_conflict", 409))
+        )
+    if kind == "computed_field":
+        compute = _require(raw, "compute", "business_rule.computed_field")
+        if compute == "subtract":
+            operands = _require(raw, "operands", "business_rule.computed_field.subtract")
+            if len(operands) != 2:
+                raise SpecError("computed_field.subtract requires exactly two operands")
+        elif compute == "sum_children":
+            _require(raw, "child", "business_rule.computed_field.sum_children")
+            if not raw.get("child_fields"):
+                raise SpecError("computed_field.sum_children requires child_fields")
+        else:
+            raise SpecError(f"unknown computed_field.compute '{compute}'")
+        return ComputedFieldRule(
+            field=_require(raw, "field", "business_rule.computed_field"),
+            compute=compute,
+            operands=tuple(raw.get("operands", []) or []),
+            child=raw.get("child"),
+            child_fields=tuple(raw.get("child_fields", []) or []),
         )
     raise SpecError(f"unknown business rule kind '{kind}'")
 

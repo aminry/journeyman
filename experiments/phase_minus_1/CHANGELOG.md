@@ -7,6 +7,27 @@ legitimate **before the first experimental run** (`run_kind: experiment`) starts
 should be **additive** where possible, and is recorded here. `protocol_version`
 (carried in every `results.json` and `taskset.json`) is bumped on each change.
 
+## protocol v3 — 2026-06-20 (additive; pre-first-experimental-run)
+
+- **New oracle dimension: `computed_field`** (the read-side dimension; ADR-0022).
+  Adds a spec→test row to `domain.md` §3 for server-derived read-only fields — two
+  sub-kinds: same-row (`available = on_hand − reserved`, H8) and aggregate-over-children
+  (`balance = Σ transaction.amount_cents`, H3; `total = Σ(line_item.amount_cents ×
+  quantity)`, H10). Restores H3/H8 to genuinely-hard and adds derive/aggregate +
+  recompute-on-mutation headroom that none of the four write-side rules test.
+- Oracle-validated the same way as the other dimensions: a correct two-resource
+  reference service passes all cases; the surgical `BUG_WRONG_COMPUTED` fails on EXACTLY
+  the `computed_field` cases on the real H3/H8/H10 (`test_oracle_corpus.py`). The
+  decisive case is **recompute-on-mutation** (add/mutate/delete a child → re-GET →
+  value refreshes), which exposes static-cache implementations.
+- **Scope: additive only.** `protocol.md`'s hypothesis/metrics/warm-up/criteria are
+  unchanged; the four prior dimensions and the corpus order/pilot triplet are
+  untouched. `overlap` (H2/H9) stays deferred. `protocol_version` bumped **v2 → v3**
+  (carried in `taskset.json` and every new `results.json`); H3/H8/H10 gain the
+  `rule:computed_field` feature_tag and updated `expected_contract_tests_min`. No
+  experimental run had started; no prior experimental result is invalidated. The
+  T-1.1 `results/_selftest/` artifacts remain labelled v2 (historical; not regenerated).
+
 ## T-1.2 corpus build — 2026-06-20 (additive; pre-first-experimental-run; still protocol v2)
 
 - Authored the 30 instance specs (`instances/*.spec.yaml`) and `taskset.json` the

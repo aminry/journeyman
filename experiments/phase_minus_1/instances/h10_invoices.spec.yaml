@@ -1,8 +1,8 @@
 # Phase −1 instance spec — H10 invoices (HARD tier)
 # Business rules: state_machine(draft→sent→paid, IMMUTABLE once paid) +
-# relationship(line_item → invoice, restrict). Second resource `line_item`.
-# pagination + multiple filters + multi-sort.
-# (manifest H10 also describes computed total = Σ line items — deferred; ADR-0021.)
+# relationship(line_item → invoice, restrict) + computed_field total_cents = Σ(line_item
+# .amount_cents × quantity) (aggregate-over-children, server-computed, read-only). Second
+# resource `line_item`. pagination + multiple filters + multi-sort.
 
 id: invoices
 title: Invoices service
@@ -17,7 +17,8 @@ resource:
     - { name: number,       type: string,   required: true, unique: true, pattern: '^[0-9]{8}$' }
     - { name: status,       type: enum,     default: draft, values: [draft, sent, paid] }
     - { name: customer,     type: string,   required: true, min_len: 1, max_len: 120 }
-    - { name: amount_cents, type: integer,  required: true, min: 0 }
+    - { name: amount_cents, type: integer,  required: true, min: 0 }   # declared amount (client-set, sortable)
+    - { name: total_cents,  type: integer,  readonly: true }           # computed: Σ(line.amount_cents × quantity)
     - { name: currency,     type: enum,     required: true, values: [usd, eur, gbp] }
     - { name: overdue,      type: boolean,  default: false }
     - { name: issued_at,    type: datetime, required: true }
@@ -70,3 +71,8 @@ business_rules:
     ref_field: invoice_id
     on_missing_parent: 422
     on_parent_delete: restrict
+  - kind: computed_field
+    field: total_cents
+    compute: sum_children
+    child: line_item
+    child_fields: [amount_cents, quantity]

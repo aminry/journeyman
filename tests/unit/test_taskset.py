@@ -43,7 +43,7 @@ def test_fixed_interleaved_order() -> None:
 
 def test_protocol_version_and_domain() -> None:
     ts = _taskset()
-    assert ts["protocol_version"] == "v2"  # CHANGELOG: results.schema run_kind amendment
+    assert ts["protocol_version"] == "v3"  # CHANGELOG: computed_field dimension added
     assert ts["domain"] == "spec-to-crud-service"
 
 

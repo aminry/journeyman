@@ -27,6 +27,7 @@ from harness.reference.service import (
     BUG_SKIP_CROSS_FIELD,
     BUG_SKIP_PARENT_CHECK,
     BUG_SKIP_REQUIRED,
+    BUG_WRONG_COMPUTED,
     build_app,
 )
 from harness.specschema import load_spec
@@ -147,6 +148,18 @@ def test_hard_multi_filter_and_multi_sort_strict():
         "h01_orders.spec.yaml", BUG_IGNORE_SECONDARY_FILTER, lambda c: c.id == "list:filter:multi"
     )
     _check("h01_orders.spec.yaml", BUG_IGNORE_SECONDARY_SORT, lambda c: c.id == "list:sort:multi")
+
+
+def test_computed_field_strict_on_corpus():
+    # ADR-0022: BUG_WRONG_COMPUTED returns a wrong value for the server-computed field;
+    # it must fail EXACTLY the computed_field cases on the real H3/H8/H10 specs (same-row
+    # available; aggregate balance; aggregate-of-product total) and nothing else.
+    for spec_name in (
+        "h03_accounts.spec.yaml",
+        "h08_inventory.spec.yaml",
+        "h10_invoices.spec.yaml",
+    ):
+        _check(spec_name, BUG_WRONG_COMPUTED, lambda c: c.category == "computed_field")
 
 
 def test_datetime_cross_field_patch_null_escape_is_caught():

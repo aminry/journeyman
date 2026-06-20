@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import pytest
+
 from harness.specschema import (
     CompositeUniqueRule,
+    ComputedFieldRule,
     CrossFieldRule,
     RelationshipRule,
+    SpecError,
     StateMachineRule,
     business_rules_of,
     parse_spec,
@@ -141,3 +145,48 @@ def test_business_rules_raw_list_preserved_for_serialization():
     spec = parse_spec(STATE_SPEC)
     assert isinstance(spec.business_rules, list)
     assert spec.business_rules[0]["kind"] == "state_machine"
+
+
+def test_parses_computed_field_subtract_and_sum_children():
+    base = {
+        "id": "x",
+        "tier": "hard",
+        "resource": {
+            "name": "x",
+            "path": "/x",
+            "fields": [
+                {"name": "id", "type": "uuid", "generated": True, "readonly": True},
+                {"name": "on_hand", "type": "integer", "required": True, "min": 0},
+                {"name": "reserved", "type": "integer", "required": True, "min": 0},
+                {"name": "available", "type": "integer", "readonly": True},
+            ],
+        },
+        "endpoints": {"create": {"method": "POST", "path": "/x", "success": 201}},
+        "business_rules": [
+            {
+                "kind": "computed_field",
+                "field": "available",
+                "compute": "subtract",
+                "operands": ["on_hand", "reserved"],
+            }
+        ],
+    }
+    rule = business_rules_of(parse_spec(base))[0]
+    assert isinstance(rule, ComputedFieldRule)
+    assert rule.compute == "subtract" and rule.operands == ("on_hand", "reserved")
+
+
+def test_computed_field_malformed_raises():
+    bad = {
+        "id": "x",
+        "tier": "hard",
+        "resource": {
+            "name": "x",
+            "path": "/x",
+            "fields": [{"name": "id", "type": "uuid", "generated": True, "readonly": True}],
+        },
+        "endpoints": {"create": {"method": "POST", "path": "/x", "success": 201}},
+        "business_rules": [{"kind": "computed_field", "field": "f", "compute": "subtract"}],
+    }
+    with pytest.raises(SpecError):
+        parse_spec(bad)  # subtract requires exactly two operands

@@ -1,7 +1,8 @@
 # Phase −1 instance spec — H3 accounts (HARD tier)
-# Business rule: relationship(transaction → account, restrict). Second resource `transaction`.
+# Business rules: relationship(transaction → account, restrict) AND computed_field
+# balance = Σ transaction.amount_cents (aggregate-over-children; server-computed, read-only,
+# recomputes as transactions are added/removed). Second resource `transaction`.
 # pagination + multiple filters + multi-sort.
-# (manifest H3 also describes a computed `balance` from posted transactions — deferred; ADR-0021.)
 
 id: accounts
 title: Accounts service
@@ -17,6 +18,7 @@ resource:
     - { name: name,               type: string,   required: true, min_len: 1, max_len: 120 }
     - { name: kind,               type: enum,     required: true, values: [checking, savings, credit] }
     - { name: credit_limit_cents, type: integer,  required: true, min: 0 }
+    - { name: balance,            type: integer,  readonly: true }   # computed: Σ transaction.amount_cents
     - { name: active,             type: boolean,  default: true }
     - { name: opened_at,          type: datetime, required: true }
 
@@ -59,3 +61,8 @@ business_rules:
     ref_field: account_id
     on_missing_parent: 422
     on_parent_delete: restrict
+  - kind: computed_field
+    field: balance
+    compute: sum_children
+    child: transaction
+    child_fields: [amount_cents]
