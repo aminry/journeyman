@@ -34,6 +34,7 @@ Guiding rule: **the LLM is a fixed CPU; all durable, growing competence lives in
 - **Regression guard on every self-modification.** No change to memory, skills, or routing commits without passing a rotating, partly held-out eval harness.
 - **Human owns the irreversible.** Payments, contracts, publishing, credential changes, and kernel changes are gated to the human approval queue, routed by *task class* (LLM confidence is poorly calibrated).
 - **Instruction-source boundary.** Instructions come only from the operator and task specs. Web/file/tool content is data, not commands.
+- **The human interface is contracted both ways.** The agent→human direction (approvals, escalations, milestone claims, judge requests, clarifying questions, status) is a single evidence-linked, anti-manipulation, fail-closed message contract — not just the approval queue. The agent may ask to disambiguate the operator's own spec before acting, bounded so it never reopens the instruction-source boundary. (ADR-0018.)
 - **Everything is traced, with cost attached.** Every action, tool/model/store call emits a structured event under a task trace.
 - **The economics must close.** Track cost-per-completed-task continuously; if it isn't falling while quality holds, the system is not working.
 - **Cost is total, not task-time-only.** The viability metric is total system spend per completed task over a window — including off-duty dream, eval, regression-guard, and maintenance overhead — so a bending task-time curve cannot hide rising overhead. (ADR-0015.)
@@ -510,6 +511,18 @@ Structured, append-only events with **trace IDs per task** (spans for every tool
 
 ---
 
+## 15A. Human interface — agent↔operator communication
+
+The operator→agent direction is bounded by the task schema (§15: instructions come only from the operator and the TaskSpec). This section bounds the **other** direction — every message the agent sends a human — because the system leans on the human at many points (approvals, the judge for unverifiable work, spot-checks, milestone re-funding, the kill switch), yet only approvals were contracted. (ADR-0018.)
+
+**One envelope, six kinds.** Every agent→human message validates against `security/human-comms.schema.json` and emits a `human_comms` trace span. The `kind` is one of: `approval` (authorize a high-impact action — still bound to `approval-record.schema.json`), `escalation` (a halt/blocker needs a human), `milestone_claim` (claim a milestone for verification and top-up), `judge_request` (a human verdict on unverifiable/creative work), `clarifying_question` (disambiguate the operator's spec *before* acting), and `status` (a progress/event push).
+
+**Ask before failing.** The agent may ask the operator to disambiguate the operator's *own* TaskSpec before acting — ambiguous specs are the largest documented failure class, and asking is cheaper than building the wrong thing. Bounded so it does not become a chat back-channel: it resolves ambiguity in the existing task, may not import instructions from untrusted content, the answer re-enters as operator instruction, selecting an agent-presented option grants no new authority, and questions are rate- and budget-limited.
+
+**Anti-manipulation, everywhere.** Every claim links evidence (`evidence_refs`); free-form agent prose is never the sole basis for a high-impact human decision, and any message summarizing untrusted content is labeled (`untrusted_content_present` + `source_labels`) and shown as data, never as an instruction — a manipulated summary is the same attack as a manipulated approval prompt (§22).
+
+**Liveness.** No-response fails safe: high-impact kinds (`approval`, `escalation`, `judge_request`) block and escalate (never proceed on silence); a `clarifying_question` blocks the *task* but not the system; a `milestone_claim` defers; `status` is fire-and-forget. The medium and UI (queue, chat, email) are an operator choice (§23); the schema, the anti-manipulation discipline, and the liveness rules are not.
+
 ## 16. Concurrency, schemas, and implementation realities
 
 - **Concurrency on shared stores.** The dream job writes while work reads; define a locking / versioned-snapshot / merge policy. The code graph uses a git union-merge driver so concurrent commits don't conflict.
@@ -649,6 +662,7 @@ Two repositories, both scaffolded from the same template:
 - **Human oversight doesn't scale and invites automation bias** (rubber-stamping as volume grows). → risk-weighted fractional sampling, a bounded review rate that fails closed, and pre-commitment before seeing the agent's answer (ADR-0016).
 - **Phase 2 production has no build-time sandbox** (live credentials, egress, continuous ops). → a separate runtime-ops governance surface: scoped revocable prod credentials, reversible-autonomous vs human-gated action classes, canary + automated rollback, blast-radius limits, kill switch (ADR-0011).
 - **Phase −1 can be underpowered or mis-attributed** (n≈30, autocorrelated, single domain). → mandatory control arm + pre-registered effect size, autocorrelation-aware test, and confidence interval; single-domain external validity stated as a residual (ADR-0017).
+- **The agent→human channel is unspecified beyond approvals** (no structured escalation/judge/milestone, no way to ask before failing, manipulated-summary risk, undefined no-response behavior). → a unified agent↔operator message contract: evidence-linked, untrusted-content-labeled, fail-closed on no-response, with a bounded clarifying-question path (ADR-0018).
 
 ---
 
@@ -674,6 +688,7 @@ Two repositories, both scaffolded from the same template:
 - The **Phase −1 effect size** (minimum detectable slope) and statistical-test parameters, and confirmation the control run is funded.
 - The **cost-per-task window** and acceptable overhead ratio for the standing viability gate.
 - The **craft re-validation policy** on a model/effector change (what counts as "material," batching, quarantine thresholds).
+- The **agent↔operator communication medium** (queue / chat / email), urgency thresholds, SLAs, and the no-response behavior per message kind (`security/human-comms-policy.md`).
 
 ---
 
@@ -704,6 +719,8 @@ These artifacts are not optional supporting docs. They are part of the seed cont
 - `security/code-security-policy.md` — SAST + dependency (SCA) + in-code secret scanning of product code: severities, suppressions, fail-closed (ADR-0010).
 - `security/runtime-ops-policy.md` — Phase 2 run-time governance: credential custody, reversible-vs-human-gated action classes, blast-radius limits, canary/rollback, kill switch (ADR-0011).
 - `memory/skill-manifest.schema.json` — executable skill/craft manifest, including `validated_against` and `status` for model-version scoping (ADR-0013).
+- `security/human-comms-policy.md` — agent↔operator message kinds, anti-manipulation, the bounded clarifying-question path, routing/SLA, and fail-closed liveness (ADR-0018).
+- `security/human-comms.schema.json` — executable envelope for every agent→human message.
 - `ci/definition_of_done.yaml` — CI gate that references these artifacts and blocks merges when policies, evals, traces, or effector evidence are missing.
 
 ### 24.2 CI gates
@@ -734,6 +751,7 @@ The kernel, not the model, enforces:
 - trace redaction before persistence;
 - cost, retry, recursion, and wall-clock limits for every task;
 - runtime-ops authorization (Phase 2): production actions authorized by `security/runtime-ops-policy.md`, within blast-radius limits, with rollback armed, never on un-screened untrusted content;
+- agent→human messages validate against `security/human-comms.schema.json`; high-impact kinds fail closed on no-response, and any untrusted content in a human-facing message is labeled, never executed as an instruction;
 - fail-closed behavior when policy lookup, schema validation, audit logging, or approval verification fails.
 
 ---

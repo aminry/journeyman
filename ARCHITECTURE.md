@@ -8,7 +8,7 @@ This is the **living** map of the Journeyman's structure, kept current by the De
 |---|---|---|
 | `kernel/` | Agent runtime (work loop), model router, tool registry, execution sandbox, event bus / trace log. **Protected** — human sign-off required to change. | Seed |
 | `memory/` | Agent knowledge (Plane B): episodic log, vector semantic + summary memory, generic skill library (model/effector-`validated_against` manifests), promotion gates with execution-grounded corroboration, unlearning + protected-class forgetting. | Seed (agent graph deferred) |
-| `governance/` | Budget ledger, cost ceiling, total-cost-per-task gate (amortized overhead), scalable human oversight (risk-weighted sampling, fail-closed), credential/capability scoping, regression guard + rotating eval harness. | Seed |
+| `governance/` | Budget ledger, cost ceiling, total-cost-per-task gate (amortized overhead), scalable human oversight (risk-weighted sampling, fail-closed), the agent↔operator message contract (approvals, escalations, judge/milestone/clarifying-questions), credential/capability scoping, regression guard + rotating eval harness. | Seed |
 | `dream/` | Consolidation, the distillation boundary (Plane A↔B), skill-library maintenance. **Seed-owned, conservative.** | Seed |
 | `cognition/` | Retrieval, immediate reflection. | Seed (curriculum deferred) |
 | `tools/` | Primitive tools (shell, file, web fetch, code exec) and the **coding-effector adapter** (Claude Code, spec-in/verified-out, instrumented). | Seed |

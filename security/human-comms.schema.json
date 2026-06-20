@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://journeyman.local/schemas/human-comms.json",
+  "title": "Journeyman Agent->Operator Message",
+  "description": "Envelope for every message the agent sends to a human (operator/judge/reviewer). Generalizes the approval channel to all agent->human communication. See ADR-0018 and security/human-comms-policy.md.",
+  "type": "object",
+  "required": ["id", "kind", "trace_id", "created_at", "target", "urgency", "requires_response", "untrusted_content_present", "payload"],
+  "additionalProperties": false,
+  "properties": {
+    "id": { "type": "string" },
+    "kind": { "enum": ["approval", "escalation", "milestone_claim", "judge_request", "clarifying_question", "status"] },
+    "trace_id": { "type": "string" },
+    "task_id": { "type": "string" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "policy_version": { "type": "integer", "minimum": 1 },
+    "target": {
+      "type": "object",
+      "required": ["role"],
+      "additionalProperties": false,
+      "properties": {
+        "role": { "enum": ["operator", "judge", "reviewer", "on_call"] },
+        "id": { "type": "string" }
+      }
+    },
+    "urgency": { "enum": ["low", "normal", "high", "critical"] },
+    "requires_response": { "type": "boolean" },
+    "expires_at": { "type": "string", "format": "date-time" },
+    "on_no_response": { "enum": ["fail_closed", "block_and_wait", "defer", "proceed_default"] },
+    "summary": {
+      "type": "string",
+      "description": "Human-readable summary. Never the sole basis for a high-impact decision — claims must link evidence_refs."
+    },
+    "evidence_refs": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Trace/diff/artifact refs backing every claim (anti-manipulation)."
+    },
+    "untrusted_content_present": {
+      "type": "boolean",
+      "description": "True if this message summarizes web/file/tool/user content."
+    },
+    "source_labels": { "type": "array", "items": { "type": "string" } },
+    "payload": { "type": "object" },
+    "response": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "received_at": { "type": "string", "format": "date-time" },
+        "responder_id": { "type": "string" },
+        "outcome": { "type": "string" },
+        "selected_option": { "type": "string" },
+        "free_text": { "type": "string" }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "$comment": "Untrusted content must be labeled with its source (anti-manipulation).",
+      "if": { "required": ["untrusted_content_present"], "properties": { "untrusted_content_present": { "const": true } } },
+      "then": { "required": ["source_labels"], "properties": { "source_labels": { "minItems": 1 } } }
+    },
+    {
+      "$comment": "High-impact kinds must require a response, link evidence, and never silently proceed.",
+      "if": { "properties": { "kind": { "enum": ["approval", "escalation", "judge_request"] } } },
+      "then": {
+        "required": ["requires_response", "on_no_response", "evidence_refs"],
+        "properties": {
+          "requires_response": { "const": true },
+          "on_no_response": { "enum": ["fail_closed", "block_and_wait"] },
+          "evidence_refs": { "minItems": 1 }
+        }
+      }
+    },
+    {
+      "$comment": "An approval message binds to a parameter-bound approval record (approval-record.schema.json).",
+      "if": { "properties": { "kind": { "const": "approval" } } },
+      "then": { "properties": { "payload": { "required": ["approval_record_ref"], "properties": { "approval_record_ref": { "type": "string" } } } } }
+    },
+    {
+      "$comment": "A clarifying question disambiguates the operator's own TaskSpec and must be answerable.",
+      "if": { "properties": { "kind": { "const": "clarifying_question" } } },
+      "then": { "properties": { "payload": { "required": ["question", "blocks_task"], "properties": { "question": { "type": "string" }, "options": { "type": "array", "items": { "type": "string" } }, "blocks_task": { "type": "boolean" } } } } }
+    },
+    {
+      "$comment": "A milestone claim links its deliverables.",
+      "if": { "properties": { "kind": { "const": "milestone_claim" } } },
+      "then": { "properties": { "payload": { "required": ["milestone_id", "deliverables"], "properties": { "milestone_id": { "type": "string" }, "deliverables": { "type": "array" } } } } }
+    },
+    {
+      "$comment": "An escalation states why, how severe, and whether the system halted.",
+      "if": { "properties": { "kind": { "const": "escalation" } } },
+      "then": { "properties": { "payload": { "required": ["reason", "severity"], "properties": { "reason": { "type": "string" }, "severity": { "enum": ["low", "medium", "high", "critical"] }, "halted": { "type": "boolean" } } } } }
+    },
+    {
+      "$comment": "A judge request packages the artifact and the acceptance criteria for unverifiable work.",
+      "if": { "properties": { "kind": { "const": "judge_request" } } },
+      "then": { "properties": { "payload": { "required": ["artifact_ref", "acceptance_criteria"], "properties": { "artifact_ref": { "type": "string" }, "acceptance_criteria": { "type": "string" } } } } }
+    }
+  ]
+}
