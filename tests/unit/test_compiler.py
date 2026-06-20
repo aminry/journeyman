@@ -117,6 +117,9 @@ def test_list_pagination_filter_sort_cases(suite) -> None:
     assert "list:sort:published_year:asc" in s
     assert "list:sort:published_year:desc" in s
     assert "list:sort:price_cents:asc" in s
+    # books has 2 filters + 2 sorts -> conjunction + composite tie-break cases (T-1.2 (b))
+    assert "list:filter:multi" in s
+    assert "list:sort:multi" in s
 
 
 def test_case_ids_are_unique(suite) -> None:

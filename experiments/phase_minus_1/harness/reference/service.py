@@ -44,6 +44,10 @@ BUG_NO_404 = "no_404_on_missing"  # unknown id returns success instead of 404
 BUG_SKIP_UNIQUE = "skip_unique_check"  # do not enforce unique fields
 BUG_IGNORE_DEFAULT = "ignore_default"  # do not apply field defaults
 BUG_WRONG_ENVELOPE = "wrong_error_envelope"  # 422 body not {"errors":[{field,message}]}
+# List-dimension bugs (T-1.2 (b)).
+BUG_LIST_NOT_ARRAY = "list_not_array"  # wrap the collection in an object, not a bare array
+BUG_IGNORE_SECONDARY_FILTER = "ignore_secondary_filter"  # apply only the first filter present
+BUG_IGNORE_SECONDARY_SORT = "ignore_secondary_sort"  # apply only the first sort key (no tie-break)
 
 
 def _now_iso() -> str:
@@ -272,17 +276,30 @@ def build_app(spec: dict, bugs: frozenset[str] = frozenset(), db_path: str = ":m
             rows = _all_rows()
             qp = request.query_params
             if BUG_IGNORE_FILTER not in bugs:
-                for fname in filters:
+                applied_one = False
+                for fname in filters:  # spec order; single-filter cases have exactly one present
                     if fname in qp:
+                        if BUG_IGNORE_SECONDARY_FILTER in bugs and applied_one:
+                            continue  # broken variant: only the first filter present is honoured
                         f = field(fname)
                         want = _coerce(f, qp[fname])
                         rows = [r for r in rows if r.get(fname) == want]
-            sort_key = qp.get("sort")
-            if sort_key:
-                desc = sort_key.startswith("-")
-                key = sort_key[1:] if desc else sort_key
-                if key in sortable:
-                    rows = sorted(rows, key=lambda r: _sort_key(r.get(key)), reverse=desc)
+                        applied_one = True
+            sort_param = qp.get("sort")
+            if sort_param:
+                # Composite sort: comma-separated keys, "-" prefix = descending. Applied
+                # stably, least-significant key first, so the first key is primary.
+                keys = []
+                for raw_key in sort_param.split(","):
+                    raw_key = raw_key.strip()
+                    desc = raw_key.startswith("-")
+                    name = raw_key[1:] if desc else raw_key
+                    if name in sortable:
+                        keys.append((name, desc))
+                if BUG_IGNORE_SECONDARY_SORT in bugs:
+                    keys = keys[:1]  # broken variant: no tie-break by later sort keys
+                for name, desc in reversed(keys):
+                    rows = sorted(rows, key=lambda r, n=name: _sort_key(r.get(n)), reverse=desc)
             if default_limit is not None:
                 try:
                     limit = int(qp.get(limit_param, default_limit))
@@ -295,6 +312,8 @@ def build_app(spec: dict, bugs: frozenset[str] = frozenset(), db_path: str = ":m
                 except ValueError:
                     offset = 0
                 rows = rows[offset : offset + limit]
+            if BUG_LIST_NOT_ARRAY in bugs:
+                return JSONResponse(status_code=lsuccess, content={"items": rows})
             return JSONResponse(status_code=lsuccess, content=rows)
 
     if "get" in endpoints:

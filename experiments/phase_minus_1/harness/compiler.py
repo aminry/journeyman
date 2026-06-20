@@ -487,6 +487,28 @@ def _list_cases(spec: InstanceSpec, nxt: SeedFn) -> list[ContractCase]:
     pag = lst.pagination
     cases: list[ContractCase] = []
 
+    if pag is None:
+        # Easy-tier list has no pagination/filter/sort. Still verify the endpoint
+        # exists and returns created rows as a JSON array (otherwise the list
+        # endpoint would be wholly untested at the easy tier — a held-out gap).
+        def run_basic(api: Api) -> CaseResult:
+            payload = valid_payload(spec, nxt())
+            r = api.create(payload)
+            if r.status_code != spec.endpoints.create.success:
+                return _fail(f"setup create failed: {r.status_code}")
+            ident = r.json()[api.id_field]
+            lr = api.list()
+            if lr.status_code != lst.success:
+                return _fail(f"list: expected {lst.success}, got {lr.status_code}")
+            items = lr.json()
+            if not isinstance(items, list):
+                return _fail("list did not return a JSON array")
+            if not any(it.get(api.id_field) == ident for it in items):
+                return _fail("list did not include the just-created entity")
+            return _ok()
+
+        cases.append(ContractCase("list:basic", "list", run_basic, expected_status=lst.success))
+
     if pag is not None:
         lp, op = pag.limit_param, pag.offset_param
         dl, ml = pag.default_limit, pag.max_limit
@@ -599,6 +621,72 @@ def _list_cases(spec: InstanceSpec, nxt: SeedFn) -> list[ContractCase]:
 
         cases.append(make_sort(f, True))
         cases.append(make_sort(f, False))
+
+    # Multi-filter (hard tier): a conjunction of ≥2 filters must AND together.
+    if len(lst.filters) >= 2:
+        f1 = spec.resource.field(lst.filters[0])
+        f2 = spec.resource.field(lst.filters[1])
+
+        def run_multi_filter(api: Api) -> CaseResult:
+            a1, _ = _distinct_pair(f1)
+            b1, b2 = _distinct_pair(f2)
+            _seed_rows(api, spec, nxt, 1, **{f1.name: a1, f2.name: b1})  # matches both
+            _seed_rows(api, spec, nxt, 1, **{f1.name: a1, f2.name: b2})  # matches only f1
+            params = {f1.name: _query_value(f1, a1), f2.name: _query_value(f2, b1)}
+            r = api.list(**params)
+            items = r.json()
+            if not isinstance(items, list):
+                return _fail("multi-filter list did not return an array")
+            if not items:
+                return _fail(f"multi-filter {params} returned nothing (expected ≥1 match)")
+            for it in items:
+                if it.get(f1.name) != a1 or it.get(f2.name) != b1:
+                    return _fail(
+                        f"multi-filter returned a row not matching BOTH "
+                        f"({f1.name}={it.get(f1.name)!r}, {f2.name}={it.get(f2.name)!r})"
+                    )
+            return _ok()
+
+        cases.append(
+            ContractCase("list:filter:multi", "list", run_multi_filter, expected_status=lst.success)
+        )
+
+    # Multi-sort (hard tier): a composite ``?sort=a,-b`` orders by a asc, then b desc.
+    if len(lst.sort) >= 2:
+        s1 = spec.resource.field(lst.sort[0])
+        s2 = spec.resource.field(lst.sort[1])
+
+        def run_multi_sort(api: Api) -> CaseResult:
+            # Two rows tie on s1 (same seed) with ASCENDING s2 in insertion order, so a
+            # secondary-sort-ignoring service (stable sort on s1 only) leaves them in the
+            # wrong order for "s2 desc"; plus rows with other s1 values.
+            for v1seed, v2seed in ((5, 1), (5, 9), (2, 3), (8, 4)):
+                p = valid_payload(spec, nxt())
+                p[s1.name] = valid_value(s1, v1seed)
+                p[s2.name] = valid_value(s2, v2seed)
+                api.create(p)
+            params = {"sort": f"{s1.name},-{s2.name}"}
+            if pag is not None:
+                params[pag.limit_param] = pag.max_limit  # keep seeded rows on the page
+            items = api.list(**params).json()
+            seq = [
+                (it.get(s1.name), it.get(s2.name))
+                for it in items
+                if _comparable(s1, it.get(s1.name)) and _comparable(s2, it.get(s2.name))
+            ]
+            for (a, b), (c, d) in zip(seq, seq[1:]):
+                if a > c:
+                    return _fail(f"multi-sort primary {s1.name} not ascending: {a!r} > {c!r}")
+                if a == c and b < d:
+                    return _fail(
+                        f"multi-sort tie on {s1.name}={a!r}: {s2.name} not descending "
+                        f"({b!r} before {d!r})"
+                    )
+            return _ok()
+
+        cases.append(
+            ContractCase("list:sort:multi", "list", run_multi_sort, expected_status=lst.success)
+        )
 
     return cases
 
