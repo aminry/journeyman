@@ -1,0 +1,210 @@
+{
+  "protocol_version": "v3",
+  "run_id": "pilot_A3",
+  "run_kind": "experiment",
+  "started_at": "2026-06-20T22:40:00Z",
+  "completed_at": "2026-06-20T23:30:00Z",
+  "pins": {
+    "model_ids": [
+      "claude-opus-4-8",
+      "claude-haiku-4-5",
+      "claude-sonnet-4-6"
+    ],
+    "effector_version": "claude-code-cli (headless -p, --output-format json)",
+    "pricing_snapshot": "claude-api reference, cached 2026-05-26",
+    "cache_policy": "effector default (ephemeral prompt cache); harness makes no model calls in the spine",
+    "retrieval_config": "vector retrieval (BAAI/bge-small-en-v1.5, normalized, cosine top-k=13 = full library; bge query-prefix on the query only); keyword/tag fallback (ADR-0020 \u00a75)",
+    "effector_model": "claude-opus-4-8",
+    "fallback_model": "claude-haiku-4-5",
+    "token_prices": {
+      "claude-opus-4-8": {
+        "input": 5.0,
+        "output": 25.0
+      },
+      "claude-haiku-4-5": {
+        "input": 1.0,
+        "output": 5.0
+      },
+      "claude-sonnet-4-6": {
+        "input": 3.0,
+        "output": 15.0
+      }
+    },
+    "embedding_model": "BAAI/bge-small-en-v1.5",
+    "effector_allowed_tools": [
+      "Read",
+      "Write",
+      "Edit",
+      "Bash"
+    ],
+    "permission_mode": "acceptEdits",
+    "budget_cap_usd": 10.0,
+    "sandbox_profile": "coding-effector-default",
+    "network_policy": "deny-by-default; allowlist PyPI + Anthropic API for the real run (experiment-only)",
+    "driver": {
+      "model": "claude-sonnet-4-6",
+      "fallback_model": "claude-haiku-4-5",
+      "temperature": 0.0,
+      "max_tokens": 8000
+    },
+    "embedding": {
+      "model_id": "BAAI/bge-small-en-v1.5",
+      "revision": "5c38ec7c405ec4b44b94cc5a9bb96e735b38267a",
+      "sentence_transformers_version": "5.6.0",
+      "torch_version": "2.12.1",
+      "normalize": true,
+      "similarity": "cosine",
+      "k": 13,
+      "query_prefix": "Represent this sentence for searching relevant passages:"
+    }
+  },
+  "tasks": [
+    {
+      "position": 1,
+      "task_id": "notes",
+      "tier": "easy",
+      "model_cost_usd": 0.029589,
+      "effector_cost_usd": 2.378699,
+      "total_cost_usd": 2.408288,
+      "wall_clock_seconds": 0.0,
+      "dod_passed": true,
+      "contract_passed": true,
+      "contract_tests_passed": 17,
+      "contract_tests_total": 17,
+      "effector_retries": 0,
+      "first_pass_contract_success": true,
+      "craft_items_retrieved": [],
+      "craft_items_reused": [],
+      "human_interventions": 0,
+      "security_events": [],
+      "trace_id": "tr_pilot_A3_notes"
+    },
+    {
+      "position": 2,
+      "task_id": "books",
+      "tier": "medium",
+      "model_cost_usd": 0.06492,
+      "effector_cost_usd": 2.592962,
+      "total_cost_usd": 2.657882,
+      "wall_clock_seconds": 0.0,
+      "dod_passed": true,
+      "contract_passed": false,
+      "contract_tests_passed": 51,
+      "contract_tests_total": 54,
+      "effector_retries": 0,
+      "first_pass_contract_success": false,
+      "craft_items_retrieved": [
+        "fastapi-sqlite-scaffold"
+      ],
+      "craft_items_reused": [
+        "fastapi-sqlite-scaffold"
+      ],
+      "human_interventions": 0,
+      "security_events": [],
+      "trace_id": "tr_pilot_A3_books"
+    },
+    {
+      "position": 3,
+      "task_id": "orders",
+      "tier": "hard",
+      "model_cost_usd": 0.041334,
+      "effector_cost_usd": 4.682432,
+      "total_cost_usd": 4.723766,
+      "wall_clock_seconds": 0.0,
+      "dod_passed": true,
+      "contract_passed": false,
+      "contract_tests_passed": 58,
+      "contract_tests_total": 59,
+      "effector_retries": 0,
+      "first_pass_contract_success": false,
+      "craft_items_retrieved": [
+        "validation-422-shape",
+        "fastapi-sqlite-scaffold"
+      ],
+      "craft_items_reused": [
+        "fastapi-sqlite-scaffold",
+        "validation-422-shape"
+      ],
+      "human_interventions": 0,
+      "security_events": [],
+      "trace_id": "tr_pilot_A3_orders"
+    },
+    {
+      "position": 4,
+      "task_id": "bookmarks",
+      "tier": "easy",
+      "model_cost_usd": 0.02604,
+      "effector_cost_usd": 2.139422,
+      "total_cost_usd": 2.165462,
+      "wall_clock_seconds": 0.0,
+      "dod_passed": true,
+      "contract_passed": true,
+      "contract_tests_passed": 15,
+      "contract_tests_total": 15,
+      "effector_retries": 0,
+      "first_pass_contract_success": true,
+      "craft_items_retrieved": [
+        "fastapi-sqlite-scaffold",
+        "cross-field-rule-recipe",
+        "validation-422-shape"
+      ],
+      "craft_items_reused": [
+        "fastapi-sqlite-scaffold"
+      ],
+      "human_interventions": 0,
+      "security_events": [],
+      "trace_id": "tr_pilot_A3_bookmarks"
+    },
+    {
+      "position": 5,
+      "task_id": "products",
+      "tier": "medium",
+      "model_cost_usd": 0.026973,
+      "effector_cost_usd": 2.749509,
+      "total_cost_usd": 2.776482,
+      "wall_clock_seconds": 0.0,
+      "dod_passed": true,
+      "contract_passed": true,
+      "contract_tests_passed": 40,
+      "contract_tests_total": 40,
+      "effector_retries": 0,
+      "first_pass_contract_success": true,
+      "craft_items_retrieved": [
+        "validation-422-shape",
+        "cross-field-rule-recipe",
+        "fastapi-sqlite-scaffold"
+      ],
+      "craft_items_reused": [
+        "fastapi-sqlite-scaffold",
+        "validation-422-shape"
+      ],
+      "human_interventions": 0,
+      "security_events": [],
+      "trace_id": "tr_pilot_A3_products"
+    }
+  ],
+  "aggregate": {
+    "warmup_tasks": 5,
+    "cost_slope_after_warmup": 0.0,
+    "cost_slope_ci": [
+      0.0,
+      0.0
+    ],
+    "min_detectable_slope": 0.0,
+    "control_run_present": false,
+    "treatment_vs_control_delta": 0.0,
+    "quality_holds": false,
+    "reuse_is_real": true,
+    "security_controls_held": true,
+    "note": "SALVAGED from per-task traces: pilot_A3 (positions 1-6) crashed at task 6 (reservations) on a gateway 502 'token refresh failed' during reflect; the consolidated results were never written (resumability gap). 5/6 tasks reconstructed; reservations' effector ran (~$2.48) but its record was lost. All 6 BOOTED (boot-PATH fix held)."
+  },
+  "decision": {
+    "status": "stopped",
+    "rationale": "Extended re-pilot (G1) \u2014 crashed on a transient gateway credential 502 at task 6; salvaged 5/6 from traces. Boot-PATH fix validated on real medium/hard services (books 51/54, orders 58/59, products 40/40 \u2014 full sub-test resolution, no boot failures). Demonstrates the resumability + transient-handling gaps that block the full 30x2. Retained as evidence, excluded from T-1.4.",
+    "residual_risks": [
+      "Run crashed on a token-refresh 502 (transient/credential gap, fix #3).",
+      "Consolidated results lost on crash (resumability gap, fix #1).",
+      "reservations record lost; its effector spend (~$2.48) is real but unrecorded."
+    ]
+  }
+}
