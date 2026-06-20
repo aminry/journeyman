@@ -1,0 +1,66 @@
+# Phase −1 instance spec — H2 reservations (HARD tier)
+# Business rules: cross_field(end_at > start_at) + relationship(reservation → room, restrict).
+# Second resource `room`. pagination + multiple filters + multi-sort.
+# (manifest H2 also describes same-room overlap detection — deferred; see ADR-0021.)
+
+id: reservations
+title: Reservations service
+tier: hard
+
+resource:
+  name: reservation
+  path: /reservations
+  fields:
+    - { name: id,         type: uuid,     generated: true, readonly: true }
+    - { name: created_at, type: datetime, generated: true, readonly: true }
+    - { name: code,       type: string,   required: true, unique: true, pattern: '^[0-9]{8}$' }
+    - { name: room_id,    type: ref,      required: true, ref: room }
+    - { name: guest,      type: string,   required: true, min_len: 1, max_len: 80 }
+    - { name: start_at,   type: datetime, required: true }
+    - { name: end_at,     type: datetime, required: true }
+    - { name: status,     type: enum,     required: true, values: [held, confirmed, cancelled] }
+    - { name: party_size, type: integer,  required: true, min: 1, max: 20 }
+    - { name: nights,     type: integer,  required: true, min: 1, max: 30 }
+    - { name: confirmed,  type: boolean,  default: false }
+
+endpoints:
+  create: { method: POST,   path: /reservations,        success: 201 }
+  get:    { method: GET,    path: "/reservations/{id}", success: 200, missing: 404 }
+  list:
+    method: GET
+    path: /reservations
+    success: 200
+    pagination: { limit_param: limit, offset_param: offset, default_limit: 20, max_limit: 100 }
+    filters: [status, confirmed]
+    sort: [party_size, nights]
+  update: { method: PATCH,  path: "/reservations/{id}", success: 200, missing: 404, partial: true }
+  delete: { method: DELETE, path: "/reservations/{id}", success: 204, missing: 404 }
+
+related:
+  name: room
+  path: /rooms
+  fields:
+    - { name: id,       type: uuid,    generated: true, readonly: true }
+    - { name: name,     type: string,  required: true, min_len: 1, max_len: 80 }
+    - { name: capacity, type: integer, required: true, min: 0, max: 10000 }
+  endpoints:
+    create: { method: POST,   path: /rooms,        success: 201 }
+    get:    { method: GET,    path: "/rooms/{id}", success: 200, missing: 404 }
+    delete: { method: DELETE, path: "/rooms/{id}", success: 204, missing: 404 }
+
+rules:
+  on_validation_error: 422
+  on_unique_conflict: 409
+  timestamps_immutable: true
+
+business_rules:
+  - kind: cross_field
+    fields: [end_at, start_at]
+    op: gt
+    message: end_at must be after start_at
+  - kind: relationship
+    parent: room
+    child: reservation
+    ref_field: room_id
+    on_missing_parent: 422
+    on_parent_delete: restrict

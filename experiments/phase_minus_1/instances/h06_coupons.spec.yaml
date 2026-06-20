@@ -1,0 +1,46 @@
+# Phase −1 instance spec — H6 coupons (HARD tier)
+# Business rule: cross_field(discount_cents ≤ min_order_cents). Single resource.
+# pagination + multiple filters + multi-sort.
+# (manifest H6 also describes a date-window active state — deferred; ADR-0021.)
+
+id: coupons
+title: Coupons service
+tier: hard
+
+resource:
+  name: coupon
+  path: /coupons
+  fields:
+    - { name: id,              type: uuid,     generated: true, readonly: true }
+    - { name: created_at,      type: datetime, generated: true, readonly: true }
+    - { name: code,            type: string,   required: true, unique: true, pattern: '^[a-z0-9-]+$' }
+    - { name: kind,            type: enum,     required: true, values: [percent, fixed] }
+    - { name: discount_cents,  type: integer,  required: true, min: 0 }
+    - { name: min_order_cents, type: integer,  required: true, min: 0 }
+    - { name: max_uses,        type: integer,  required: true, min: 1, max: 100000 }
+    - { name: active,          type: boolean,  default: true }
+    - { name: starts_at,       type: datetime, required: true }
+
+endpoints:
+  create: { method: POST,   path: /coupons,        success: 201 }
+  get:    { method: GET,    path: "/coupons/{id}", success: 200, missing: 404 }
+  list:
+    method: GET
+    path: /coupons
+    success: 200
+    pagination: { limit_param: limit, offset_param: offset, default_limit: 20, max_limit: 100 }
+    filters: [kind, active]
+    sort: [max_uses, starts_at]
+  update: { method: PATCH,  path: "/coupons/{id}", success: 200, missing: 404, partial: true }
+  delete: { method: DELETE, path: "/coupons/{id}", success: 204, missing: 404 }
+
+rules:
+  on_validation_error: 422
+  on_unique_conflict: 409
+  timestamps_immutable: true
+
+business_rules:
+  - kind: cross_field
+    fields: [discount_cents, min_order_cents]
+    op: lte
+    message: discount_cents must not exceed min_order_cents

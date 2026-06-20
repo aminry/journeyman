@@ -1,0 +1,47 @@
+# Phase −1 instance spec — H8 inventory (HARD tier)
+# Business rule: composite_unique(sku, warehouse) — the same SKU may exist in different
+# warehouses, but not twice in one. Single resource (a globally-unique `barcode` is the
+# medium-tier single unique field). pagination + multiple filters + multi-sort.
+# (manifest H8 also describes computed `available = on_hand − reserved` — deferred; ADR-0021.)
+
+id: inventory
+title: Inventory service
+tier: hard
+
+resource:
+  name: inventory_item
+  path: /inventory
+  fields:
+    - { name: id,           type: uuid,     generated: true, readonly: true }
+    - { name: created_at,   type: datetime, generated: true, readonly: true }
+    - { name: barcode,      type: string,   required: true, unique: true, pattern: '^[0-9]{12}$' }
+    - { name: sku,          type: string,   required: true, min_len: 1, max_len: 40 }
+    - { name: warehouse,    type: string,   required: true, min_len: 1, max_len: 40 }
+    - { name: on_hand,      type: integer,  required: true, min: 0 }
+    - { name: reserved,     type: integer,  required: true, min: 0 }
+    - { name: category,     type: enum,     required: true, values: [raw, finished, packaging] }
+    - { name: active,       type: boolean,  default: true }
+    - { name: restocked_at, type: datetime, required: true }
+
+endpoints:
+  create: { method: POST,   path: /inventory,        success: 201 }
+  get:    { method: GET,    path: "/inventory/{id}", success: 200, missing: 404 }
+  list:
+    method: GET
+    path: /inventory
+    success: 200
+    pagination: { limit_param: limit, offset_param: offset, default_limit: 20, max_limit: 100 }
+    filters: [category, active]
+    sort: [on_hand, restocked_at]
+  update: { method: PATCH,  path: "/inventory/{id}", success: 200, missing: 404, partial: true }
+  delete: { method: DELETE, path: "/inventory/{id}", success: 204, missing: 404 }
+
+rules:
+  on_validation_error: 422
+  on_unique_conflict: 409
+  timestamps_immutable: true
+
+business_rules:
+  - kind: composite_unique
+    fields: [sku, warehouse]
+    on_conflict: 409

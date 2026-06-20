@@ -1,0 +1,69 @@
+# Phase −1 instance spec — H7 shipments (HARD tier)
+# Business rules: state_machine(created→in_transit→delivered / exception) +
+# relationship(shipment → order, restrict). Second resource `order`.
+# pagination + multiple filters + multi-sort.
+
+id: shipments
+title: Shipments service
+tier: hard
+
+resource:
+  name: shipment
+  path: /shipments
+  fields:
+    - { name: id,           type: uuid,     generated: true, readonly: true }
+    - { name: created_at,   type: datetime, generated: true, readonly: true }
+    - { name: tracking,     type: string,   required: true, unique: true, pattern: '^[0-9]{12}$' }
+    - { name: order_id,     type: ref,      required: true, ref: order }
+    - { name: status,       type: enum,     default: created, values: [created, in_transit, delivered, exception] }
+    - { name: carrier,      type: enum,     required: true, values: [ups, fedex, dhl] }
+    - { name: weight_grams, type: integer,  required: true, min: 0 }
+    - { name: insured,      type: boolean,  default: false }
+    - { name: shipped_at,   type: datetime, required: true }
+
+endpoints:
+  create: { method: POST,   path: /shipments,        success: 201 }
+  get:    { method: GET,    path: "/shipments/{id}", success: 200, missing: 404 }
+  list:
+    method: GET
+    path: /shipments
+    success: 200
+    pagination: { limit_param: limit, offset_param: offset, default_limit: 20, max_limit: 100 }
+    filters: [carrier, insured]
+    sort: [weight_grams, shipped_at]
+  update: { method: PATCH,  path: "/shipments/{id}", success: 200, missing: 404, partial: true }
+  delete: { method: DELETE, path: "/shipments/{id}", success: 204, missing: 404 }
+
+related:
+  name: order
+  path: /orders
+  fields:
+    - { name: id,          type: uuid,    generated: true, readonly: true }
+    - { name: reference,   type: string,  required: true, min_len: 1, max_len: 40 }
+    - { name: total_cents, type: integer, required: true, min: 0 }
+  endpoints:
+    create: { method: POST,   path: /orders,        success: 201 }
+    get:    { method: GET,    path: "/orders/{id}", success: 200, missing: 404 }
+    delete: { method: DELETE, path: "/orders/{id}", success: 204, missing: 404 }
+
+rules:
+  on_validation_error: 422
+  on_unique_conflict: 409
+  timestamps_immutable: true
+
+business_rules:
+  - kind: state_machine
+    field: status
+    initial: created
+    transitions:
+      created: [in_transit, exception]
+      in_transit: [delivered, exception]
+      delivered: []
+      exception: []
+    on_illegal: 409
+  - kind: relationship
+    parent: order
+    child: shipment
+    ref_field: order_id
+    on_missing_parent: 422
+    on_parent_delete: restrict

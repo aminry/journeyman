@@ -1,0 +1,64 @@
+# Phase −1 instance spec — H5 playlists (HARD tier)
+# Business rules: relationship(track → playlist, restrict) + composite_unique(playlist_id,
+# position) ON THE CHILD (a track's position is unique within its playlist).
+# Second resource `track`. pagination + multiple filters + multi-sort.
+
+id: playlists
+title: Playlists service
+tier: hard
+
+resource:
+  name: playlist
+  path: /playlists
+  fields:
+    - { name: id,             type: uuid,     generated: true, readonly: true }
+    - { name: created_at,     type: datetime, generated: true, readonly: true }
+    - { name: slug,           type: string,   required: true, unique: true, pattern: '^[a-z0-9-]+$' }
+    - { name: name,           type: string,   required: true, min_len: 1, max_len: 120 }
+    - { name: visibility,     type: enum,     required: true, values: [public, private, unlisted] }
+    - { name: collaborative,  type: boolean,  default: false }
+    - { name: follower_count, type: integer,  required: true, min: 0 }
+    - { name: published_at,   type: datetime, required: true }
+
+endpoints:
+  create: { method: POST,   path: /playlists,        success: 201 }
+  get:    { method: GET,    path: "/playlists/{id}", success: 200, missing: 404 }
+  list:
+    method: GET
+    path: /playlists
+    success: 200
+    pagination: { limit_param: limit, offset_param: offset, default_limit: 20, max_limit: 100 }
+    filters: [visibility, collaborative]
+    sort: [follower_count, published_at]
+  update: { method: PATCH,  path: "/playlists/{id}", success: 200, missing: 404, partial: true }
+  delete: { method: DELETE, path: "/playlists/{id}", success: 204, missing: 404 }
+
+related:
+  name: track
+  path: /tracks
+  fields:
+    - { name: id,           type: uuid,    generated: true, readonly: true }
+    - { name: playlist_id,  type: ref,     required: true, ref: playlist }
+    - { name: position,     type: integer, required: true, min: 0 }
+    - { name: title,        type: string,  required: true, min_len: 1, max_len: 200 }
+    - { name: duration_sec, type: integer, required: true, min: 0 }
+  endpoints:
+    create: { method: POST,   path: /tracks,        success: 201 }
+    get:    { method: GET,    path: "/tracks/{id}", success: 200, missing: 404 }
+    delete: { method: DELETE, path: "/tracks/{id}", success: 204, missing: 404 }
+
+rules:
+  on_validation_error: 422
+  on_unique_conflict: 409
+  timestamps_immutable: true
+
+business_rules:
+  - kind: relationship
+    parent: playlist
+    child: track
+    ref_field: playlist_id
+    on_missing_parent: 422
+    on_parent_delete: restrict
+  - kind: composite_unique
+    fields: [playlist_id, position]
+    on_conflict: 409

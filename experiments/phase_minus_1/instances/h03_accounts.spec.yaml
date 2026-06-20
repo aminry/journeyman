@@ -1,0 +1,61 @@
+# Phase −1 instance spec — H3 accounts (HARD tier)
+# Business rule: relationship(transaction → account, restrict). Second resource `transaction`.
+# pagination + multiple filters + multi-sort.
+# (manifest H3 also describes a computed `balance` from posted transactions — deferred; ADR-0021.)
+
+id: accounts
+title: Accounts service
+tier: hard
+
+resource:
+  name: account
+  path: /accounts
+  fields:
+    - { name: id,                 type: uuid,     generated: true, readonly: true }
+    - { name: created_at,         type: datetime, generated: true, readonly: true }
+    - { name: number,             type: string,   required: true, unique: true, pattern: '^[0-9]{10}$' }
+    - { name: name,               type: string,   required: true, min_len: 1, max_len: 120 }
+    - { name: kind,               type: enum,     required: true, values: [checking, savings, credit] }
+    - { name: credit_limit_cents, type: integer,  required: true, min: 0 }
+    - { name: active,             type: boolean,  default: true }
+    - { name: opened_at,          type: datetime, required: true }
+
+endpoints:
+  create: { method: POST,   path: /accounts,        success: 201 }
+  get:    { method: GET,    path: "/accounts/{id}", success: 200, missing: 404 }
+  list:
+    method: GET
+    path: /accounts
+    success: 200
+    pagination: { limit_param: limit, offset_param: offset, default_limit: 20, max_limit: 100 }
+    filters: [kind, active]
+    sort: [credit_limit_cents, opened_at]
+  update: { method: PATCH,  path: "/accounts/{id}", success: 200, missing: 404, partial: true }
+  delete: { method: DELETE, path: "/accounts/{id}", success: 204, missing: 404 }
+
+related:
+  name: transaction
+  path: /transactions
+  fields:
+    - { name: id,          type: uuid,     generated: true, readonly: true }
+    - { name: account_id,  type: ref,      required: true, ref: account }
+    - { name: amount_cents, type: integer, required: true }
+    - { name: memo,        type: string,   required: true, min_len: 1, max_len: 200 }
+    - { name: posted_at,   type: datetime, required: true }
+  endpoints:
+    create: { method: POST,   path: /transactions,        success: 201 }
+    get:    { method: GET,    path: "/transactions/{id}", success: 200, missing: 404 }
+    delete: { method: DELETE, path: "/transactions/{id}", success: 204, missing: 404 }
+
+rules:
+  on_validation_error: 422
+  on_unique_conflict: 409
+  timestamps_immutable: true
+
+business_rules:
+  - kind: relationship
+    parent: account
+    child: transaction
+    ref_field: account_id
+    on_missing_parent: 422
+    on_parent_delete: restrict
