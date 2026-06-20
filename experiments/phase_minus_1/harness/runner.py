@@ -377,60 +377,68 @@ def run_instance(
     )
 
 
-def _spec_to_dict(spec: InstanceSpec) -> dict:
-    """Re-serialise the spec for the effector task (fields/endpoints/rules)."""
+def _resource_dict(resource) -> dict:
     return {
-        "resource": {
-            "name": spec.resource.name,
-            "path": spec.resource.path,
-            "fields": [
-                {
-                    k: v
-                    for k, v in {
-                        "name": f.name,
-                        "type": f.type,
-                        "required": f.required,
-                        "readonly": f.readonly,
-                        "generated": f.generated,
-                        "unique": f.unique,
-                        "default": f.default,
-                        "min": f.min,
-                        "max": f.max,
-                        "min_len": f.min_len,
-                        "max_len": f.max_len,
-                        "pattern": f.pattern,
-                        "values": f.values,
-                        "ref": f.ref,
-                    }.items()
-                    if v is not None
-                }
-                for f in spec.resource.fields
-            ],
-        },
-        "endpoints": {
-            e.kind: {
-                "method": e.method,
-                "path": e.path,
-                "success": e.success,
-                **({"missing": e.missing} if e.missing is not None else {}),
-                **({"partial": e.partial} if e.partial else {}),
-                **(
-                    {
-                        "pagination": {
-                            "limit_param": e.pagination.limit_param,
-                            "offset_param": e.pagination.offset_param,
-                            "default_limit": e.pagination.default_limit,
-                            "max_limit": e.pagination.max_limit,
-                        }
-                    }
-                    if e.pagination
-                    else {}
-                ),
-                **({"filters": e.filters} if e.filters else {}),
-                **({"sort": e.sort} if e.sort else {}),
+        "name": resource.name,
+        "path": resource.path,
+        "fields": [
+            {
+                k: v
+                for k, v in {
+                    "name": f.name,
+                    "type": f.type,
+                    "required": f.required,
+                    "readonly": f.readonly,
+                    "generated": f.generated,
+                    "unique": f.unique,
+                    "default": f.default,
+                    "min": f.min,
+                    "max": f.max,
+                    "min_len": f.min_len,
+                    "max_len": f.max_len,
+                    "pattern": f.pattern,
+                    "values": f.values,
+                    "ref": f.ref,
+                }.items()
+                if v is not None
             }
-            for e in spec.endpoints.present()
-        },
+            for f in resource.fields
+        ],
+    }
+
+
+def _endpoints_dict(endpoints) -> dict:
+    return {
+        e.kind: {
+            "method": e.method,
+            "path": e.path,
+            "success": e.success,
+            **({"missing": e.missing} if e.missing is not None else {}),
+            **({"partial": e.partial} if e.partial else {}),
+            **(
+                {
+                    "pagination": {
+                        "limit_param": e.pagination.limit_param,
+                        "offset_param": e.pagination.offset_param,
+                        "default_limit": e.pagination.default_limit,
+                        "max_limit": e.pagination.max_limit,
+                    }
+                }
+                if e.pagination
+                else {}
+            ),
+            **({"filters": e.filters} if e.filters else {}),
+            **({"sort": e.sort} if e.sort else {}),
+        }
+        for e in endpoints.present()
+    }
+
+
+def _spec_to_dict(spec: InstanceSpec) -> dict:
+    """Re-serialise the spec for the effector task (fields/endpoints/rules/rules/related)."""
+    out = {
+        "resource": _resource_dict(spec.resource),
+        "endpoints": _endpoints_dict(spec.endpoints),
         "rules": {
             "on_validation_error": spec.rules.on_validation_error,
             "on_unique_conflict": spec.rules.on_unique_conflict,
@@ -438,3 +446,9 @@ def _spec_to_dict(spec: InstanceSpec) -> dict:
         },
         "business_rules": spec.business_rules,
     }
+    if spec.related is not None:
+        out["related"] = {
+            **_resource_dict(spec.related.resource),
+            "endpoints": _endpoints_dict(spec.related.endpoints),
+        }
+    return out
