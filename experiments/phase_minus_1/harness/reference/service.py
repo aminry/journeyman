@@ -59,6 +59,7 @@ BUG_SKIP_PARENT_CHECK = (
     "skip_parent_check"  # child may ref a missing parent; parent delete unguarded
 )
 BUG_SKIP_COMPOSITE_UNIQUE = "skip_composite_unique"  # accept a duplicate composite key
+BUG_WRONG_COMPUTED = "wrong_computed"  # server-computed field returns a wrong/stale value
 
 
 def _now_iso() -> str:
@@ -151,6 +152,7 @@ def build_app(spec: dict, bugs: frozenset[str] = frozenset(), db_path: str = ":m
     cf_rules = [r for r in business_rules if r.get("kind") == "cross_field"]
     cu_rules = [r for r in business_rules if r.get("kind") == "composite_unique"]
     rel_rules = [r for r in business_rules if r.get("kind") == "relationship"]
+    computed_rules = [r for r in business_rules if r.get("kind") == "computed_field"]
 
     def _owner(fname: str) -> str:
         """Which resource owns ``fname`` (field-based rules apply to that resource)."""
@@ -279,6 +281,39 @@ def build_app(spec: dict, bugs: frozenset[str] = frozenset(), db_path: str = ":m
             for row in _all_rows(r["child"]):
                 if row.get(r["ref_field"]) == ident:
                     _remove(r["child"], row[child["id_field"]])
+
+    def _child_ref_to(parent_name: str, child_name: str) -> str | None:
+        for f in resources[child_name]["fields"]:
+            if f.get("type") == "ref" and f.get("ref") == parent_name:
+                return f["name"]
+        return None
+
+    def _apply_computed(rname: str, entity: dict) -> dict:
+        """Derive read-only computed fields live (never stored) so they are never stale."""
+        out = dict(entity)
+        for r in computed_rules:
+            if _owner(r["field"]) != rname:
+                continue
+            if r["compute"] == "subtract":
+                a, b = r["operands"]
+                value = (out.get(a) or 0) - (out.get(b) or 0)
+            elif r["compute"] == "sum_children":
+                child, child_fields = r["child"], r["child_fields"]
+                ref_field = _child_ref_to(rname, child)
+                ident = out.get(resources[rname]["id_field"])
+                value = 0
+                for row in _all_rows(child):
+                    if ref_field is not None and row.get(ref_field) == ident:
+                        prod = 1
+                        for cf in child_fields:
+                            prod *= row.get(cf) or 0
+                        value += prod
+            else:
+                continue
+            if BUG_WRONG_COMPUTED in bugs:
+                value += 1  # broken variant: a wrong/stale value
+            out[r["field"]] = value
+        return out
 
     def _sm_initial(rname: str, entity: dict) -> dict:
         for r in sm_rules:
@@ -413,7 +448,7 @@ def build_app(spec: dict, bugs: frozenset[str] = frozenset(), db_path: str = ":m
                     return _conflict(cconf["fields"][0], "composite key must be unique")
                 entity = _sm_initial(rname, _populate(cfg, clean))
                 _insert(rname, entity, id_field)
-                return JSONResponse(status_code=success, content=entity)
+                return JSONResponse(status_code=success, content=_apply_computed(rname, entity))
 
         if "list" in eps:
             lst = eps["list"]
@@ -464,6 +499,7 @@ def build_app(spec: dict, bugs: frozenset[str] = frozenset(), db_path: str = ":m
                     except ValueError:
                         offset = 0
                     rows = rows[offset : offset + limit]
+                rows = [_apply_computed(rname, r) for r in rows]  # computed fields live per row
                 if BUG_LIST_NOT_ARRAY in bugs:
                     return JSONResponse(status_code=lsuccess, content={"items": rows})
                 return JSONResponse(status_code=lsuccess, content=rows)
@@ -482,7 +518,7 @@ def build_app(spec: dict, bugs: frozenset[str] = frozenset(), db_path: str = ":m
                         status_code=gmissing,
                         content={"errors": [{"field": id_field, "message": "not found"}]},
                     )
-                return JSONResponse(status_code=gsuccess, content=row)
+                return JSONResponse(status_code=gsuccess, content=_apply_computed(rname, row))
 
         if "update" in eps:
             usuccess = int(eps["update"].get("success", 200))
@@ -549,7 +585,7 @@ def build_app(spec: dict, bugs: frozenset[str] = frozenset(), db_path: str = ":m
                 if cconf:
                     return _conflict(cconf["fields"][0], "composite key must be unique")
                 _save(rname, ident, merged)
-                return JSONResponse(status_code=usuccess, content=merged)
+                return JSONResponse(status_code=usuccess, content=_apply_computed(rname, merged))
 
         if "delete" in eps:
             dsuccess = int(eps["delete"].get("success", 204))

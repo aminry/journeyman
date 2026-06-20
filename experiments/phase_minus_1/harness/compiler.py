@@ -35,6 +35,7 @@ from typing import Any, Callable
 from harness.payloads import boundary_cases, valid_payload_for_resource, valid_value
 from harness.specschema import (
     CompositeUniqueRule,
+    ComputedFieldRule,
     CrossFieldRule,
     Field,
     InstanceSpec,
@@ -111,6 +112,19 @@ def _id_field_of(resource: ResourceSpec) -> str:
 
 def id_field_name(spec: InstanceSpec) -> str:
     return _id_field_of(spec.resource)
+
+
+def _resource_named(spec: InstanceSpec, name: str) -> ResourceSpec:
+    if spec.related is not None and spec.related.resource.name == name:
+        return spec.related.resource
+    return spec.resource
+
+
+def _computed_field_names(spec: InstanceSpec) -> set[str]:
+    """Server-managed fields that are *computed* — may legitimately be 0/falsy (an
+    aggregate with no children), so the generic 'populated' checks skip them; the
+    computed_field cases verify them instead."""
+    return {r.field for r in business_rules_of(spec) if isinstance(r, ComputedFieldRule)}
 
 
 def _hi_lo(fa: Field, fb: Field) -> tuple[Any, Any]:
@@ -315,8 +329,9 @@ def _create_valid(spec: InstanceSpec, nxt: SeedFn) -> ContractCase:
         for k, v in payload.items():
             if body.get(k) != v:
                 return _fail(f"response did not echo {k!r} ({body.get(k)!r} != {v!r})")
+        computed = _computed_field_names(spec)  # may be 0/falsy; checked by computed_field cases
         for f in spec.resource.fields:
-            if f.server_managed and not body.get(f.name):
+            if f.server_managed and f.name not in computed and not body.get(f.name):
                 return _fail(f"server-managed field {f.name!r} not populated")
         return _ok()
 
@@ -1179,6 +1194,171 @@ def _relationship_cases(
     return cases
 
 
+def _computed_field_cases(
+    spec: InstanceSpec, nxt: SeedFn, rule: ComputedFieldRule
+) -> list[ContractCase]:
+    fld = rule.field
+    create = spec.endpoints.create
+    cases: list[ContractCase] = []
+
+    if rule.compute == "subtract":
+        a, b = rule.operands
+        fa, fb = spec.resource.field(a), spec.resource.field(b)
+
+        def run_value(api: Api) -> CaseResult:
+            p = api.payload(nxt())
+            va, vb = valid_value(fa, 50), valid_value(fb, 10)
+            p[a], p[b] = va, vb
+            r = api.create(p)
+            if r.status_code != create.success:
+                return _fail(f"setup create failed: {r.status_code}: {r.text[:160]}")
+            got = r.json().get(fld)
+            if got != va - vb:
+                return _fail(f"computed {fld}: expected {va - vb} ({va}-{vb}), got {got!r}")
+            return _ok()
+
+        def run_client_ignored(api: Api) -> CaseResult:
+            p = api.payload(nxt())
+            va, vb = valid_value(fa, 50), valid_value(fb, 10)
+            p[a], p[b], p[fld] = va, vb, 9_999_999  # client tries to set the computed field
+            r = api.create(p)
+            if r.status_code != create.success:
+                return _fail(f"setup create failed: {r.status_code}")
+            got = r.json().get(fld)
+            if got != va - vb:
+                return _fail(f"client-set {fld} not ignored: expected {va - vb}, got {got!r}")
+            return _ok()
+
+        cases += [
+            ContractCase(f"computed_field:value:{fld}", "computed_field", run_value, field=fld),
+            ContractCase(
+                f"computed_field:client_ignored:{fld}",
+                "computed_field",
+                run_client_ignored,
+                field=fld,
+            ),
+        ]
+
+        up = spec.endpoints.update
+        if up is not None:
+
+            def run_recompute(api: Api) -> CaseResult:
+                p = api.payload(nxt())
+                va, vb = valid_value(fa, 50), valid_value(fb, 10)
+                p[a], p[b] = va, vb
+                r = api.create(p)
+                if r.status_code != create.success:
+                    return _fail(f"setup create failed: {r.status_code}")
+                ident = r.json()[api.id_field]
+                va2 = valid_value(fa, 80)
+                u = api.update(ident, {a: va2})
+                if u.status_code != up.success:
+                    return _fail(f"PATCH {a}: expected {up.success}, got {u.status_code}")
+                got = api.get(ident).json().get(fld)
+                if got != va2 - vb:
+                    return _fail(
+                        f"{fld} not recomputed after PATCH: expected {va2 - vb}, got {got!r}"
+                    )
+                return _ok()
+
+            cases.append(
+                ContractCase(
+                    f"computed_field:recompute:{fld}", "computed_field", run_recompute, field=fld
+                )
+            )
+        return cases
+
+    # compute == "sum_children" — aggregate over child rows
+    child = rule.child
+    child_res = _resource_named(spec, child)
+    ref_field = next(
+        (f.name for f in child_res.fields if f.type == "ref" and f.ref == spec.resource.name), None
+    )
+    cfs = list(rule.child_fields)
+    child_idf = _id_field_of(child_res)
+
+    def _mk_child(api: Api, pid: Any, k: int) -> tuple[dict, int]:
+        cp = api.make_payload(child, nxt())
+        cp[ref_field] = pid
+        prod = 1
+        for i, cf in enumerate(cfs):
+            v = (k + 1) * 10 + (i + 1)  # distinct, nonzero, small (within child-field ranges)
+            cp[cf] = v
+            prod *= v
+        return cp, prod
+
+    def _new_parent(api: Api) -> Any:
+        r = api.create(api.payload(nxt()))
+        return r.json()[api.id_field] if r.status_code == create.success else None
+
+    def run_initial(api: Api) -> CaseResult:
+        pid = _new_parent(api)
+        if pid is None:
+            return _fail("setup parent create failed")
+        got = api.get(pid).json().get(fld)
+        if got != 0:
+            return _fail(f"{fld} with no children: expected 0, got {got!r}")
+        return _ok()
+
+    def run_aggregate(api: Api) -> CaseResult:
+        pid = _new_parent(api)
+        if pid is None:
+            return _fail("setup parent create failed")
+        expected = 0
+        for k in range(2):
+            cp, prod = _mk_child(api, pid, k)
+            cr = api.create_in(child, cp)
+            if cr.status_code != api.success_of(child, "create"):
+                return _fail(f"child create failed: {cr.status_code}: {cr.text[:160]}")
+            expected += prod
+        got = api.get(pid).json().get(fld)
+        if got != expected:
+            return _fail(f"{fld} aggregate: expected {expected}, got {got!r}")
+        return _ok()
+
+    def run_recompute(api: Api) -> CaseResult:
+        pid = _new_parent(api)
+        if pid is None:
+            return _fail("setup parent create failed")
+        base = 0
+        for k in range(2):
+            cp, prod = _mk_child(api, pid, k)
+            api.create_in(child, cp)
+            base += prod
+        if api.get(pid).json().get(fld) != base:
+            return _fail(f"{fld}: expected {base} before mutation")
+        cp3, prod3 = _mk_child(api, pid, 5)
+        cr = api.create_in(child, cp3)
+        child_ident = cr.json().get(child_idf)
+        if api.get(pid).json().get(fld) != base + prod3:
+            return _fail(f"{fld} not recomputed after adding a child (expected {base + prod3})")
+        if spec.related is not None and spec.related.endpoints.delete is not None:
+            api.delete_in(child, child_ident)
+            if api.get(pid).json().get(fld) != base:
+                return _fail(f"{fld} not recomputed after deleting a child (expected {base})")
+        return _ok()
+
+    def run_client_ignored(api: Api) -> CaseResult:
+        p = api.payload(nxt())
+        p[fld] = 9_999_999
+        r = api.create(p)
+        if r.status_code != create.success:
+            return _fail(f"setup create failed: {r.status_code}")
+        got = api.get(r.json()[api.id_field]).json().get(fld)
+        if got != 0:
+            return _fail(f"client-set {fld} not ignored: expected 0, got {got!r}")
+        return _ok()
+
+    return [
+        ContractCase(f"computed_field:initial:{fld}", "computed_field", run_initial, field=fld),
+        ContractCase(f"computed_field:aggregate:{fld}", "computed_field", run_aggregate, field=fld),
+        ContractCase(f"computed_field:recompute:{fld}", "computed_field", run_recompute, field=fld),
+        ContractCase(
+            f"computed_field:client_ignored:{fld}", "computed_field", run_client_ignored, field=fld
+        ),
+    ]
+
+
 def _business_rule_cases(spec: InstanceSpec, nxt: SeedFn) -> list[ContractCase]:
     cases: list[ContractCase] = []
     for rule in business_rules_of(spec):
@@ -1190,6 +1370,8 @@ def _business_rule_cases(spec: InstanceSpec, nxt: SeedFn) -> list[ContractCase]:
             cases += _composite_unique_cases(spec, nxt, rule)
         elif isinstance(rule, RelationshipRule):
             cases += _relationship_cases(spec, nxt, rule)
+        elif isinstance(rule, ComputedFieldRule):
+            cases += _computed_field_cases(spec, nxt, rule)
     return cases
 
 
@@ -1219,8 +1401,13 @@ def compile_contract_suite(spec: InstanceSpec) -> list[ContractCase]:
         for f in spec.resource.writable_fields():
             if f.has_default and not f.required:
                 cases.append(_default_case(spec, nxt, f))
+        computed_fields = {
+            r.field for r in business_rules_of(spec) if isinstance(r, ComputedFieldRule)
+        }
         for f in spec.resource.fields:
-            if f.server_managed:
+            # computed fields are server-managed but can be 0/falsy (e.g. an aggregate with
+            # no children yet); they have dedicated computed_field cases instead.
+            if f.server_managed and f.name not in computed_fields:
                 cases.append(_server_managed_case(spec, nxt, f))
         for f in spec.resource.unique_fields():
             cases.append(_unique_case(spec, nxt, f))
