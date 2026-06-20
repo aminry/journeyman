@@ -15,7 +15,7 @@ This is the **living** map of the Journeyman's structure, kept current by the De
 | `project/` | Project scaffolder, the code-graph indexer interface, and the Definition-of-Done logic. Contains `project-template/`. | Seed |
 | `observability/` | Trace queries and dashboards over the event log. | Seed schema; dashboards Phase 1 |
 | `evals/` | The rotating, partly held-out regression harness + held-out sets. | Seed |
-| `experiments/` | The Phase −1 validation harness and results. | Phase −1 |
+| `experiments/` | The Phase −1 validation harness and results. `phase_minus_1/harness/` is the T-1.1 measurement spine (spec→contract-suite compiler/oracle, fresh-repo scaffolder, instrumented coding-effector boundary, flat craft library + reuse counter, runner, run-config pins); see ADR-0019. Effector-agnostic (`drive_coding_effector`), validated end-to-end on the `books` instance with a deterministic fake effector. | Phase −1 |
 | `tasks/` | The TaskSpec backlog. | — |
 | `coordination/` | Multi-agent messaging, contract-net, roles. **DEFERRED** — placeholder only; do not build until a task provably requires it. | Deferred |
 
