@@ -196,6 +196,29 @@ class _FakeClient:
         self.messages = _FakeMessages(resp, recorder, fail)
 
 
+class RateLimitError(Exception):
+    """Name matches anthropic.RateLimitError so the driver treats it as retryable."""
+
+
+class _FlakyMessages:
+    def __init__(self, resp, fail_times: int, exc: Exception):
+        self._resp = resp
+        self._fail_times = fail_times
+        self._exc = exc
+        self.calls = 0
+
+    def create(self, **kwargs):
+        self.calls += 1
+        if self.calls <= self._fail_times:
+            raise self._exc
+        return self._resp
+
+
+class _FlakyClient:
+    def __init__(self, resp, fail_times: int, exc: Exception):
+        self.messages = _FlakyMessages(resp, fail_times, exc)
+
+
 def test_anthropic_compose_builds_pinned_request_and_parses_incorporation() -> None:
     spec = load_spec(BOOKS)
     item = _pag_item()
@@ -347,7 +370,51 @@ def test_anthropic_falls_back_to_haiku_and_records_it(tmp_path: Path) -> None:
         last_validated="2026-06-20T00:00:00Z",
         client=_FakeClient(resp, {}, fail=True),
         fallback_client=_FakeClient(resp, rec),
+        max_retries=0,
     )
     res = drv.compose(spec=spec, retrieved=[])
     assert rec["model"] == "claude-haiku-4-5"
     assert res.model == "claude-haiku-4-5"
+
+
+def test_anthropic_retries_transient_rate_limit_then_succeeds() -> None:
+    """A transient 429 must not crash the run: retry the SAME model with backoff before
+    falling back, so a 30-task run survives bursts after real spend has started."""
+    sleeps: list[float] = []
+    resp = _Resp("submit_composition", {"incorporated": []})
+    client = _FlakyClient(resp, fail_times=2, exc=RateLimitError("429 rate_limit_error"))
+    drv = AnthropicDriver(
+        model="claude-sonnet-4-6",
+        fallback_model="claude-haiku-4-5",
+        temperature=0.0,
+        validated_against=VA,
+        last_validated="2026-06-20T00:00:00Z",
+        client=client,
+        max_retries=3,
+        sleep=lambda d: sleeps.append(d),
+    )
+    res = drv.compose(spec=load_spec(BOOKS), retrieved=[])
+    assert res.model == "claude-sonnet-4-6"  # recovered on the primary, no fallback
+    assert client.messages.calls == 3  # 2 failures + 1 success
+    assert len(sleeps) == 2  # backed off before each retry
+
+
+def test_anthropic_exhausts_primary_retries_then_falls_back() -> None:
+    resp = _Resp("submit_composition", {"incorporated": []})
+    primary = _FlakyClient(resp, fail_times=99, exc=RateLimitError("429 rate_limit_error"))
+    rec: dict = {}
+    drv = AnthropicDriver(
+        model="claude-sonnet-4-6",
+        fallback_model="claude-haiku-4-5",
+        temperature=0.0,
+        validated_against=VA,
+        last_validated="2026-06-20T00:00:00Z",
+        client=primary,
+        fallback_client=_FakeClient(resp, rec),
+        max_retries=2,
+        sleep=lambda d: None,
+    )
+    res = drv.compose(spec=load_spec(BOOKS), retrieved=[])
+    assert primary.messages.calls == 3  # max_retries + 1 attempts on primary
+    assert res.model == "claude-haiku-4-5"
+    assert rec["model"] == "claude-haiku-4-5"

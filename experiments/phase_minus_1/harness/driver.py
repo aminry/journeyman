@@ -25,6 +25,7 @@ Invariants enforced here:
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
@@ -337,6 +338,9 @@ class AnthropicDriver:
         max_tokens: int = 8000,
         client: Any = None,
         fallback_client: Any = None,
+        max_retries: int = 5,
+        backoff_base: float = 1.5,
+        sleep: Any = None,
     ):
         self.system_prompt = DRIVER_SYSTEM_PROMPT
         self.model = model
@@ -347,6 +351,9 @@ class AnthropicDriver:
         self._last_validated = last_validated
         self._client = client
         self._fallback_client = fallback_client
+        self.max_retries = max_retries
+        self.backoff_base = backoff_base
+        self._sleep = sleep if sleep is not None else time.sleep
 
     # -- transport --------------------------------------------------------- #
     def _client_for(self, primary: bool) -> Any:
@@ -363,7 +370,12 @@ class AnthropicDriver:
         return self._fallback_client
 
     def _call(self, tool: dict, user: str) -> tuple[dict, int, int, str]:
-        """Forced-tool call with a Sonnet→Haiku fallback. Returns (tool_input, tin, tout, model)."""
+        """Forced-tool call with bounded retry/backoff per model, then a Sonnet→Haiku
+        fallback. Returns (tool_input, tin, tout, model). A transient 429/overload retries
+        the SAME model with exponential backoff before falling back, so a long run survives
+        rate-limit bursts after real spend has started; a non-retryable error falls back
+        immediately; exhausting both raises the last error (compose runs before the effector,
+        so a hard rate-limit fails fast with no wasted effector spend)."""
         kwargs = dict(
             max_tokens=self.max_tokens,
             temperature=self.temperature,
@@ -372,14 +384,21 @@ class AnthropicDriver:
             tool_choice={"type": "tool", "name": tool["name"]},
             messages=[{"role": "user", "content": user}],
         )
-        try:
-            resp = self._client_for(True).messages.create(model=self.model, **kwargs)
-            model = self.model
-        except Exception:
-            resp = self._client_for(False).messages.create(model=self.fallback_model, **kwargs)
-            model = self.fallback_model
-        tool_input = _first_tool_input(resp)
-        return tool_input, int(resp.usage.input_tokens), int(resp.usage.output_tokens), model
+        last_exc: Exception | None = None
+        for model, primary in ((self.model, True), (self.fallback_model, False)):
+            client = self._client_for(primary)
+            for attempt in range(self.max_retries + 1):
+                try:
+                    resp = client.messages.create(model=model, **kwargs)
+                    tin, tout = int(resp.usage.input_tokens), int(resp.usage.output_tokens)
+                    return _first_tool_input(resp), tin, tout, model
+                except Exception as exc:  # noqa: BLE001 - classified by _is_retryable
+                    last_exc = exc
+                    if attempt < self.max_retries and _is_retryable(exc):
+                        self._sleep(self.backoff_base**attempt)
+                        continue
+                    break  # non-retryable or retries exhausted -> try the fallback model
+        raise last_exc  # type: ignore[misc]
 
     def _va(self, model: str) -> dict:
         """validated_against records the driver model that actually produced the craft
@@ -465,6 +484,26 @@ class AnthropicDriver:
             last_validated=self._last_validated,
         )
         return ReflectResult(action, item, target_id, tin, tout, model, rationale)
+
+
+_RETRYABLE_EXC_NAMES = {
+    "RateLimitError",
+    "InternalServerError",
+    "APIConnectionError",
+    "APITimeoutError",
+    "APIStatusError",
+    "OverloadedError",
+}
+_RETRYABLE_SUBSTRINGS = ("rate_limit", "overloaded", "429", "529", "timeout", "connection")
+
+
+def _is_retryable(exc: Exception) -> bool:
+    """Transient API errors worth retrying the same model for (anthropic exception type
+    names + message heuristics, so we needn't import anthropic to classify)."""
+    if type(exc).__name__ in _RETRYABLE_EXC_NAMES:
+        return True
+    msg = str(exc).lower()
+    return any(s in msg for s in _RETRYABLE_SUBSTRINGS)
 
 
 def _first_tool_input(resp: Any) -> dict:
