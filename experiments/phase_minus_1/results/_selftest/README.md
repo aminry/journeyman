@@ -20,6 +20,7 @@ Files:
 
 - `spine_books.fake.results.json` — fake-effector spine run (zero model spend; the
   effector body is the reference service). Proves the pipeline.
-- `spine_books.real.results.json` — *(added once the single real `--effector
-  claude` run is executed)* real Claude Code CLI run; proves the live adapter seam
-  (CLI call, cost/usage parsing, boot/egress, git-diff capture).
+- `spine_books.real.results.json` — real Claude Code CLI run (T-1.1 go-ahead);
+  proves the live adapter seam (CLI call, cost/usage parsing, boot/egress,
+  git-diff capture). The model built the service from the spec + craft only and
+  passed all 52 held-out contract cases + the instance DoD; effector cost $2.66.

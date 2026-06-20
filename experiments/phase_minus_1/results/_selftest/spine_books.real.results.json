@@ -1,0 +1,96 @@
+{
+  "protocol_version": "v1",
+  "run_id": "spine_books_real",
+  "run_kind": "harness_selftest",
+  "started_at": "2026-06-20T06:21:21Z",
+  "completed_at": "2026-06-20T06:31:20Z",
+  "pins": {
+    "model_ids": [
+      "claude-opus-4-8",
+      "claude-haiku-4-5"
+    ],
+    "effector_version": "claude-code-cli (headless -p, --output-format json)",
+    "pricing_snapshot": "claude-api reference, cached 2026-05-26",
+    "cache_policy": "effector default (ephemeral prompt cache); harness makes no model calls in the spine",
+    "retrieval_config": "flat keyword/tag retrieval (spine); vector retrieval deferred to T-1.3",
+    "effector_model": "claude-opus-4-8",
+    "fallback_model": "claude-haiku-4-5",
+    "token_prices": {
+      "claude-opus-4-8": {
+        "input": 5.0,
+        "output": 25.0
+      },
+      "claude-haiku-4-5": {
+        "input": 1.0,
+        "output": 5.0
+      },
+      "claude-sonnet-4-6": {
+        "input": 3.0,
+        "output": 15.0
+      }
+    },
+    "embedding_model": null,
+    "effector_allowed_tools": [
+      "Read",
+      "Write",
+      "Edit",
+      "Bash"
+    ],
+    "permission_mode": "acceptEdits",
+    "budget_cap_usd": 10.0,
+    "sandbox_profile": "coding-effector-default",
+    "network_policy": "deny-by-default; allowlist PyPI + Anthropic API for the real run (experiment-only)"
+  },
+  "tasks": [
+    {
+      "position": 1,
+      "task_id": "books",
+      "tier": "medium",
+      "model_cost_usd": 0.0,
+      "effector_cost_usd": 2.661066,
+      "total_cost_usd": 2.661066,
+      "wall_clock_seconds": 599.933,
+      "dod_passed": true,
+      "contract_passed": true,
+      "contract_tests_passed": 52,
+      "contract_tests_total": 52,
+      "effector_retries": 0,
+      "first_pass_contract_success": true,
+      "craft_items_retrieved": [
+        "fastapi-sqlite-scaffold"
+      ],
+      "craft_items_reused": [
+        "fastapi-sqlite-scaffold"
+      ],
+      "human_interventions": 0,
+      "security_events": [],
+      "trace_id": "tr_spine_books_real_books"
+    }
+  ],
+  "aggregate": {
+    "warmup_tasks": 5,
+    "cost_slope_after_warmup": 0.0,
+    "cost_slope_ci": [
+      0.0,
+      0.0
+    ],
+    "min_detectable_slope": 0.0,
+    "control_run_present": false,
+    "treatment_vs_control_delta": 0.0,
+    "quality_holds": true,
+    "reuse_is_real": true,
+    "security_controls_held": true,
+    "note": "Spine smoke run: n too small for a slope; warm-up/slope/CI are placeholders. Real values come from T-1.3 (30-task Run A + mandatory control Run B)."
+  },
+  "decision": {
+    "status": "invalid",
+    "rationale": "HARNESS SELF-TEST (run_kind=harness_selftest), NOT an experimental decision and must not be read or aggregated as one. The T-1.1 spine is validated end-to-end on one instance (books): scaffold -> drive effector (spec only) -> boot -> contract suite -> DoD -> per-task record. A real Phase -1 decision requires run_kind=experiment over the full 30-task set with Run A + the mandatory control Run B and the pre-registered statistical test (ADR-0017, T-1.3/T-1.4).",
+    "residual_risks": [
+      "Single task (n=1): no cost slope, no warm-up exclusion, no statistical test.",
+      "No control run (Run B): treatment-vs-control delta not yet measured.",
+      "Spine uses keyword/tag retrieval; protocol's vector retrieval lands at T-1.3.",
+      "Instance DoD is the minimal wired subset; full typed-gate DoD is Phase-0 (T0.7).",
+      "Driver/orchestrator not yet present: craft was hand-seeded, not agent-written."
+    ]
+  }
+}
