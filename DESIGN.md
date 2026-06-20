@@ -42,6 +42,7 @@ Multi-agent coordination, agent-level graph memory, custom model training, and a
 - ADR-0015 — Total-cost-of-ownership accounting + viability-gate scoping
 - ADR-0016 — Scalable human oversight
 - ADR-0017 — Phase −1 statistical rigor
+- ADR-0018 — Agent↔operator communication contract (human interface)
 
 ## Phases
 

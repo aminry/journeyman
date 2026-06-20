@@ -43,6 +43,8 @@ assurance_artifacts:
   code_security_policy: "security/code-security-policy.md"
   runtime_ops_policy: "security/runtime-ops-policy.md"
   skill_manifest_schema: "memory/skill-manifest.schema.json"
+  human_comms_policy: "security/human-comms-policy.md"
+  human_comms_schema: "security/human-comms.schema.json"
 
 gates:
 
@@ -139,6 +141,8 @@ gates:
     files:
       - "security/tool-policy.yaml"
       - "security/approval-record.schema.json"
+      - "security/human-comms.schema.json"
+      - "memory/skill-manifest.schema.json"
       - "experiments/phase_minus_1/taskset.schema.json"
       - "experiments/phase_minus_1/results.schema.json"
       - "observability/trace-schema.json"

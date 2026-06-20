@@ -28,6 +28,7 @@ rules, retrieval sources, model providers, or effector capabilities change.
 | Self-modification to mainline | regression guard | modified memory, skills, prompts, evals | held-out evals and human review |
 | Effector output to release | code-security + DoD gate | effector-written product code | SAST + SCA + secret scan, spec/test independent verification |
 | Agent to production runtime (Phase 2) | runtime-ops policy layer | model-proposed operational action | scoped credentials, blast-radius limits, canary + rollback, human gate for irreversible ops |
+| Agent to operator (outbound) | human-comms policy | agent-authored message / summary | evidence-linked, untrusted-content-labeled, schema-validated, fail-closed liveness |
 
 ## Attacker Profiles
 
@@ -61,6 +62,8 @@ rules, retrieval sources, model providers, or effector capabilities change.
 | Craft staleness after model change | a model-specific workaround becomes anti-craft | `validated_against` + re-validation + quarantine | craft-revalidation evidence |
 | Oversight saturation / automation bias | rubber-stamped self-modifications at volume | risk-weighted fractional sampling, fail-closed overflow, pre-commitment | approval/review span |
 | Runtime-ops overreach (Phase 2) | unsafe or irreversible production action | blast-radius limits, human-gated irreversible classes, canary + rollback, kill switch | runtime_ops span |
+| Manipulated human-facing summary | a human approves/judges on a poisoned agent summary | evidence_refs required; untrusted content labeled & never instruction; normalized fields | human_comms span |
+| Unanswered escalation / silent proceed | a high-impact action proceeds on no human response | fail-closed liveness per message kind (ADR-0018) | human_comms span |
 
 ## Residual Risks
 
@@ -92,4 +95,5 @@ Review this file when:
 - a security incident, injection attempt, approval failure, or trace leak occurs;
 - Phase -1 or regression-guard thresholds change;
 - the code-security policy, runtime-ops policy, or spec/test verification threshold changes;
-- the system enters Phase 2 (production runtime) or adds production credentials.
+- the system enters Phase 2 (production runtime) or adds production credentials;
+- the agent↔operator communication policy or message schema changes.

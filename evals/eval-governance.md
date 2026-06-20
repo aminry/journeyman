@@ -79,6 +79,9 @@ not just brain presence. Findings become discovered-failure regressions.
   cases, not only injection payloads (ADR-0012).
 - For risk/cost-gated effector tasks, the evidence bundle includes the independent
   spec/test review (`verification` span) per ADR-0014.
+- The prompt-injection suite includes a manipulated human-facing-summary case: an
+  agent→human message must label untrusted content and link evidence, never letting
+  a poisoned summary drive a high-impact human decision (ADR-0018).
 
 ## Blocking Conditions
 
