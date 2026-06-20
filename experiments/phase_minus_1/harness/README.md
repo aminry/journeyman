@@ -73,4 +73,10 @@ No driver/orchestrator, no dream/graph/second agent/promotion gate, no 30-spec
 corpus, no Run A/control Run B, no slope/CI/decision. Retrieval is keyword/tag
 (vector retrieval lands at T-1.3). Run artifacts (scaffolded repos, generated
 suites, results, traces) are written under `.context/phase_minus_1_runs/`
-(gitignored); a committed example lives in `../results/`.
+(gitignored); committed example self-test results live in `../results/_selftest/`.
+
+Every spine run is `run_kind: "harness_selftest"` (schema-enforced never to carry a
+`pass`/`provisional_pass` decision; `decision.status` is `invalid`). The T-1.4
+analysis treats a result as a real decision only via
+`harness.results.is_real_experiment_decision()` — `run_kind == "experiment"`, the
+full 30-task set, and a control run. Real experiment results live in `../results/`.

@@ -9,12 +9,30 @@ import pytest
 from harness.results import (
     build_results,
     build_task_record,
+    is_real_experiment_decision,
     spine_aggregate,
     spine_decision,
     validate_results,
     write_results,
 )
 from harness.runconfig import default_run_config
+
+
+def _spine_results(tasks, **over):
+    cfg = default_run_config()
+    kwargs = dict(
+        run_id="r",
+        run_kind="harness_selftest",
+        started_at="2026-06-19T10:00:00Z",
+        completed_at="2026-06-19T10:00:12Z",
+        pins=cfg.to_pins(),
+        tasks=tasks,
+        aggregate=spine_aggregate(tasks),
+        decision=spine_decision(tasks),
+    )
+    kwargs.update(over)
+    return build_results(**kwargs)
+
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -80,29 +98,48 @@ def test_contract_passed_derived_from_counts() -> None:
 
 
 def test_full_results_validates_against_schema() -> None:
-    cfg = default_run_config()
-    rec = sample_record()
-    agg = spine_aggregate([rec])
-    decision = spine_decision([rec])
-    results = build_results(
-        run_id="run_spine_books",
-        started_at="2026-06-19T10:00:00Z",
-        completed_at="2026-06-19T10:00:12Z",
-        pins=cfg.to_pins(),
-        tasks=[rec],
-        aggregate=agg,
-        decision=decision,
-    )
-    # must not raise
-    validate_results(results)
+    results = _spine_results([sample_record()])
+    validate_results(results)  # must not raise
+    assert results["run_kind"] == "harness_selftest"
     assert results["decision"]["status"] != "pass"  # no control run -> never a full pass
 
 
-def test_spine_decision_is_not_a_full_pass_and_flags_residuals() -> None:
-    rec = sample_record()
-    d = spine_decision([rec])
-    assert d["status"] in {"provisional_pass", "fail", "invalid", "stopped"}
+def test_spine_decision_is_a_self_test_not_a_pass() -> None:
+    d = spine_decision([sample_record()])
+    # must NOT read as a pass (provisional_pass reads too close to a pass for a smoke)
+    assert d["status"] not in {"pass", "provisional_pass"}
+    assert d["status"] == "invalid"
     assert d["residual_risks"]  # must name what's missing (control run, n=1, ...)
+
+
+def test_schema_rejects_selftest_with_passlike_status() -> None:
+    bad = _spine_results([sample_record()])
+    for status in ("pass", "provisional_pass"):
+        bad["decision"]["status"] = status
+        with pytest.raises(Exception):
+            validate_results(bad)
+
+
+def test_is_real_experiment_decision_guard() -> None:
+    # the spine self-test is never a real decision
+    assert is_real_experiment_decision(_spine_results([sample_record()])) is False
+    # a fabricated full experiment run (30 tasks + control) is
+    tasks = [sample_record(position=i + 1) for i in range(30)]
+    exp = _spine_results(
+        tasks,
+        run_kind="experiment",
+        aggregate={**spine_aggregate(tasks), "control_run_present": True},
+        decision={"status": "fail", "rationale": "x"},
+    )
+    assert is_real_experiment_decision(exp) is True
+    # one task short -> not a real decision even if marked experiment
+    short = _spine_results(
+        [sample_record()],
+        run_kind="experiment",
+        aggregate={**spine_aggregate([sample_record()]), "control_run_present": True},
+        decision={"status": "fail", "rationale": "x"},
+    )
+    assert is_real_experiment_decision(short) is False
 
 
 def test_aggregate_marks_control_absent() -> None:
@@ -122,53 +159,27 @@ def test_aggregate_marks_control_absent() -> None:
 
 
 def test_validate_results_rejects_bad_record() -> None:
-    cfg = default_run_config()
     bad = sample_record()
     del bad["trace_id"]  # required by schema
-    results = build_results(
-        run_id="r",
-        started_at="2026-06-19T10:00:00Z",
-        completed_at="2026-06-19T10:00:12Z",
-        pins=cfg.to_pins(),
-        tasks=[bad],
-        aggregate=spine_aggregate([bad]),
-        decision=spine_decision([bad]),
-    )
     with pytest.raises(Exception):
-        validate_results(results)
+        validate_results(_spine_results([bad]))
+
+
+def test_build_results_rejects_unknown_run_kind() -> None:
+    with pytest.raises(ValueError):
+        _spine_results([sample_record()], run_kind="nonsense")
 
 
 def test_write_results_validates_then_writes(tmp_path) -> None:
-    cfg = default_run_config()
-    rec = sample_record()
-    results = build_results(
-        run_id="r",
-        started_at="2026-06-19T10:00:00Z",
-        completed_at="2026-06-19T10:00:12Z",
-        pins=cfg.to_pins(),
-        tasks=[rec],
-        aggregate=spine_aggregate([rec]),
-        decision=spine_decision([rec]),
-    )
-    out = write_results(results, tmp_path / "nested" / "results.json")
+    out = write_results(_spine_results([sample_record()]), tmp_path / "nested" / "results.json")
     assert out.exists()
     import json
 
-    assert json.loads(out.read_text())["run_id"] == "r"
+    assert json.loads(out.read_text())["run_kind"] == "harness_selftest"
 
 
 def test_write_results_rejects_invalid(tmp_path) -> None:
-    cfg = default_run_config()
     bad = sample_record()
     del bad["task_id"]
-    results = build_results(
-        run_id="r",
-        started_at="2026-06-19T10:00:00Z",
-        completed_at="2026-06-19T10:00:12Z",
-        pins=cfg.to_pins(),
-        tasks=[bad],
-        aggregate=spine_aggregate([bad]),
-        decision=spine_decision([bad]),
-    )
     with pytest.raises(Exception):
-        write_results(results, tmp_path / "results.json")
+        write_results(_spine_results([bad]), tmp_path / "results.json")

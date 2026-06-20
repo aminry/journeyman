@@ -75,6 +75,17 @@ those are T-1.2/T-1.3. The instance Definition-of-Done is the minimal wired
 subset (the instance's own unit tests); the full typed-gate DoD is Phase-0
 (T0.7). The orchestrator/craft seam is designed to plug in cleanly at T-1.3.
 
+**Self-test vs experiment (pre-run schema amendment).** Because a spine/smoke run
+must never be mistaken for an experimental decision, `results.schema.json` gains a
+required `run_kind` discriminator (`experiment` | `harness_selftest`) with a
+constraint that a `harness_selftest` can never carry a `pass`/`provisional_pass`
+status; the spine's records are `harness_selftest` with `decision.status =
+"invalid"` and live under `results/_selftest/`. `harness.results.is_real_
+experiment_decision()` is the guard the T-1.4 analysis uses — only `run_kind ==
+"experiment"` over the full task set with a control run counts. This is an
+*additive, pre-run* amendment to a pre-registered schema (no real experimental run
+has started; it strengthens validity rather than changing the design).
+
 ## Consequences
 
 - **Positive:** the spine runs `books` end-to-end with zero model spend (fake

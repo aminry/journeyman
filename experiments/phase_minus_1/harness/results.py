@@ -110,15 +110,24 @@ def spine_aggregate(tasks: list[dict]) -> dict[str, Any]:
 
 
 def spine_decision(tasks: list[dict]) -> dict[str, Any]:
-    """A deliberately lower-confidence decision for the measurement-spine run."""
+    """A harness self-test makes NO experimental decision.
+
+    Paired with ``run_kind="harness_selftest"``, the status is deliberately
+    ``"invalid"`` (not ``provisional_pass``, which reads too close to a pass): as an
+    *experimental* decision this run is not valid — it only proves the machinery
+    works. The real decision requires ``run_kind="experiment"`` over the full task
+    set with the control run (T-1.4); see :func:`is_real_experiment_decision`.
+    """
     return {
-        "status": "provisional_pass",
+        "status": "invalid",
         "rationale": (
-            "T-1.1 measurement spine validated end-to-end on one instance (books): "
-            "scaffold -> drive effector (spec only) -> boot -> contract suite -> DoD "
-            "-> per-task record. This is NOT the Phase -1 experimental decision. The "
-            "hypothesis decision requires Run A (30 tasks) and the mandatory control "
-            "Run B with the pre-registered statistical test (ADR-0017, T-1.3)."
+            "HARNESS SELF-TEST (run_kind=harness_selftest), NOT an experimental "
+            "decision and must not be read or aggregated as one. The T-1.1 spine is "
+            "validated end-to-end on one instance (books): scaffold -> drive effector "
+            "(spec only) -> boot -> contract suite -> DoD -> per-task record. A real "
+            "Phase -1 decision requires run_kind=experiment over the full 30-task set "
+            "with Run A + the mandatory control Run B and the pre-registered "
+            "statistical test (ADR-0017, T-1.3/T-1.4)."
         ),
         "residual_risks": [
             "Single task (n=1): no cost slope, no warm-up exclusion, no statistical test.",
@@ -130,9 +139,14 @@ def spine_decision(tasks: list[dict]) -> dict[str, Any]:
     }
 
 
+# The full Phase -1 task set a real experimental decision is computed over.
+EXPERIMENT_TASK_COUNT = 30
+
+
 def build_results(
     *,
     run_id: str,
+    run_kind: str,
     started_at: str,
     completed_at: str,
     pins: dict,
@@ -141,9 +155,12 @@ def build_results(
     decision: dict,
     protocol_version: str = "v1",
 ) -> dict[str, Any]:
+    if run_kind not in ("experiment", "harness_selftest"):
+        raise ValueError(f"run_kind must be 'experiment' or 'harness_selftest', got {run_kind!r}")
     return {
         "protocol_version": protocol_version,
         "run_id": run_id,
+        "run_kind": run_kind,
         "started_at": started_at,
         "completed_at": completed_at,
         "pins": pins,
@@ -151,6 +168,21 @@ def build_results(
         "aggregate": aggregate,
         "decision": decision,
     }
+
+
+def is_real_experiment_decision(results: dict) -> bool:
+    """Guard for T-1.4 analysis: only a full experiment run yields a real decision.
+
+    True only when the run is an ``experiment`` (not a harness self-test), covers the
+    full task set, and has the mandatory control run. Anything else — including every
+    spine/smoke artifact under ``results/_selftest/`` — must be ignored by the
+    pass/stop analysis.
+    """
+    return (
+        results.get("run_kind") == "experiment"
+        and len(results.get("tasks", [])) >= EXPERIMENT_TASK_COUNT
+        and bool(results.get("aggregate", {}).get("control_run_present"))
+    )
 
 
 def validate_results(results: dict) -> None:

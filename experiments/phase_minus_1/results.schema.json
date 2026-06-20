@@ -3,7 +3,7 @@
   "$id": "https://journeyman.local/schemas/phase-minus-1-results.json",
   "title": "Phase -1 Results",
   "type": "object",
-  "required": ["protocol_version", "run_id", "started_at", "completed_at", "pins", "tasks", "aggregate", "decision"],
+  "required": ["protocol_version", "run_id", "run_kind", "started_at", "completed_at", "pins", "tasks", "aggregate", "decision"],
   "additionalProperties": false,
   "allOf": [
     {
@@ -15,11 +15,25 @@
       "then": {
         "properties": { "aggregate": { "required": ["control_run_present", "treatment_vs_control_delta"], "properties": { "control_run_present": { "const": true } } } }
       }
+    },
+    {
+      "$comment": "A harness self-test can never report a pass-like decision; only run_kind=experiment makes a real decision.",
+      "if": {
+        "required": ["run_kind"],
+        "properties": { "run_kind": { "const": "harness_selftest" } }
+      },
+      "then": {
+        "properties": { "decision": { "properties": { "status": { "not": { "enum": ["pass", "provisional_pass"] } } } } }
+      }
     }
   ],
   "properties": {
     "protocol_version": {
       "type": "string"
+    },
+    "run_kind": {
+      "enum": ["experiment", "harness_selftest"],
+      "description": "experiment = a real Phase -1 run (Run A/B over the full task set) whose decision counts; harness_selftest = a spine/smoke run that exercises the machinery and must NEVER be read as an experimental decision (T-1.4 analysis ignores it)."
     },
     "run_id": {
       "type": "string"

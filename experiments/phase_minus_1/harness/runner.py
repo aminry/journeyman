@@ -349,6 +349,7 @@ def run_instance(
 
     results_doc = build_results(
         run_id=run_id,
+        run_kind="harness_selftest",  # the spine is a self-test, never an experiment decision
         started_at=started_at,
         completed_at=completed_at,
         pins=config.to_pins(),

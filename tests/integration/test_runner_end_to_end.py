@@ -46,6 +46,15 @@ def test_results_json_validates(run_result) -> None:
     assert run_result.results_path.exists()
 
 
+def test_run_is_labeled_self_test_not_a_decision(run_result) -> None:
+    from harness.results import is_real_experiment_decision
+
+    assert run_result.results_doc["run_kind"] == "harness_selftest"
+    # never reads as a pass, and the analysis guard ignores it
+    assert run_result.results_doc["decision"]["status"] not in {"pass", "provisional_pass"}
+    assert is_real_experiment_decision(run_result.results_doc) is False
+
+
 def test_contract_suite_all_passed(run_result) -> None:
     failures = [(cid, d) for cid, ok, d in run_result.suite_result.results if not ok]
     assert run_result.suite_result.all_passed, f"contract failures: {failures}"

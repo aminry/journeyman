@@ -71,6 +71,7 @@ def main(argv: list[str] | None = None) -> int:
                 "effector_cost_usd": rec["effector_cost_usd"],
                 "craft_reused": rec["craft_items_reused"],
                 "results": str(result.results_path),
+                "run_kind": result.results_doc["run_kind"],
                 "decision": result.results_doc["decision"]["status"],
             },
             indent=2,
