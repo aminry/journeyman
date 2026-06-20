@@ -1,6 +1,6 @@
-# Platform — Self-Extending Agent System
+# Journeyman — Self-Extending Agent System
 
-This repository is the **platform**: a self-extending agent system that is built in phases, extends itself, and is eventually pointed at one real web product under milestone-gated budget. It is built under the same professional-engineering discipline it later enforces on every project it builds.
+This repository is the **Journeyman**: a self-extending agent system that is built in phases, extends itself, and is eventually pointed at one real web product under milestone-gated budget. It is built under the same professional-engineering discipline it later enforces on every project it builds.
 
 > **If you are Claude Code starting the initial run, read in this order:**
 > 1. **`docs/SPEC.md`** — the full architecture & build specification. This is the source of truth.
@@ -34,7 +34,7 @@ This repository is the **platform**: a self-extending agent system that is built
 
 ## Running the gate
 
-Nothing is "done" until the **Definition-of-Done gate** (`ci/definition_of_done.yaml`) passes. Run it locally with `hooks/run_dod.sh`. CI runs the same file. For this repo the platform-only `regression-guard` gate is **enabled**.
+Nothing is "done" until the **Definition-of-Done gate** (`ci/definition_of_done.yaml`) passes. Run it locally with `hooks/run_dod.sh`. CI runs the same file. For this repo the Journeyman-only `regression-guard` gate is **enabled**.
 
 ## Repository map
 

@@ -1,6 +1,6 @@
 # project-template
 
-The canonical scaffold for **every** repository the system builds — and for the platform's own repository. `scaffold_project` copies this tree into a new repo and fills the `{{PLACEHOLDERS}}` below. Building from one template is what guarantees every project (and the platform itself) starts with the same professional-engineering discipline: documented decisions, a regenerable code knowledge graph, tests, a build system, and an enforced Definition-of-Done gate.
+The canonical scaffold for **every** repository the system builds — and for the Journeyman's own repository. `scaffold_project` copies this tree into a new repo and fills the `{{PLACEHOLDERS}}` below. Building from one template is what guarantees every project (and the Journeyman itself) starts with the same professional-engineering discipline: documented decisions, a regenerable code knowledge graph, tests, a build system, and an enforced Definition-of-Done gate.
 
 ## Contents
 
@@ -41,7 +41,7 @@ project-template/
 | `{{CODEGRAPH_CMD}}` | Regenerate `codegraph/graph.json` |
 | `{{SECRET_SCAN_CMD}}` | Scan the diff for committed secrets |
 | `{{DOD_CMD}}` | Run the full Definition-of-Done gate locally |
-| `{{EVAL_HARNESS_CMD}}` | (platform repo only) run the rotating regression eval harness |
+| `{{EVAL_HARNESS_CMD}}` | (Journeyman repo only) run the rotating regression eval harness |
 | `{{DEPENDENCY_MANIFEST}}` | Dependency manifest path (e.g. `pyproject.toml`, `package.json`) |
 | `{{YYYY-MM-DD}}`, `{{WHO_DECIDED}}` | ADR metadata |
 
@@ -49,5 +49,5 @@ project-template/
 
 1. `scaffold_project` copies this tree, fills the placeholders for the chosen stack, and initializes git + the code-graph indexer (with watch mode).
 2. CI is wired to `ci/definition_of_done.yaml`; nothing merges unless the gate passes.
-3. For the **platform's own repo**, enable the `regression-guard` gate in `definition_of_done.yaml` (it is disabled by default for built-product repos).
+3. For the **Journeyman's own repo**, enable the `regression-guard` gate in `definition_of_done.yaml` (it is disabled by default for built-product repos).
 4. Coding work — including anything delegated to the coding effector — is accepted only when this gate passes.

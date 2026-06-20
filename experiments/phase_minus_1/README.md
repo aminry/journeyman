@@ -15,9 +15,11 @@ In a narrow, verifiable domain, the *Nth* task gets cheaper and better than the 
 - The Definition-of-Done gate for the chosen domain.
 - Trace + cost logging.
 
-## Domain (operator picks one — see `docs/SPEC.md` §23)
+## Domain (CHOSEN: spec → CRUD service)
 
-Choose one narrow, **verifiable** domain so the cost/quality signal is clean. Examples: "scaffold + deploy a small CRUD service from a spec," or "extract structured records from a class of messy documents." Record the choice and the 30 task instances here.
+The domain is fixed: **spec → small CRUD/REST service**, the closest verifiable stepping-stone to the Phase 2 web product. Full definition — instance spec schema, worked example, the 30-instance scheme, ordering, and the verification approach — is in **`domain.md`**. The 30 instances and their fixed run order are in **`instances/manifest.md`**; the worked example is **`instances/example_books.spec.yaml`**.
+
+Verification is an **objective, held-out, black-box HTTP contract suite generated from each instance spec** — no LLM judge. Acceptance is binary (all contract tests pass) plus the project's own Definition-of-Done gate.
 
 ## Protocol
 

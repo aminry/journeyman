@@ -1,10 +1,10 @@
-# CLAUDE.md — Operating contract for the platform repository
+# CLAUDE.md — Operating contract for the Journeyman repository
 
-> This is the operating contract for any agent working in this repo — you (Claude Code), the platform agent later, or a human. It describes **this** system and is part of its Plane-A project knowledge. Read it, and `docs/SPEC.md`, before making changes.
+> This is the operating contract for any agent working in this repo — you (Claude Code), the Journeyman agent later, or a human. It describes **this** system and is part of its Plane-A project knowledge. Read it, and `docs/SPEC.md`, before making changes.
 
 ## 1. What this repository is
 
-- **Name:** platform (self-extending agent system)
+- **Name:** Journeyman (self-extending agent system)
 - **Purpose:** an agent that accumulates portable engineering craft and builds real software systems, getting better each time, under enforced engineering discipline.
 - **Stack:** Python 3.11+
 - **Status:** Phase −1 / Phase 0 (initial build)
@@ -19,7 +19,7 @@
 
 ## 3. Definition of Done
 
-A change is **done only when the Definition-of-Done gate passes** (`ci/definition_of_done.yaml`, run via `hooks/run_dod.sh`) — never on assertion. It requires: unit + integration tests pass; coverage ≥ threshold; build green; lint clean; **docs in sync** (§4); **code graph regenerated and committed**; and — for this platform repo — the **regression guard** (the eval harness) passes for any self-modification.
+A change is **done only when the Definition-of-Done gate passes** (`ci/definition_of_done.yaml`, run via `hooks/run_dod.sh`) — never on assertion. It requires: unit + integration tests pass; coverage ≥ threshold; build green; lint clean; **docs in sync** (§4); **code graph regenerated and committed**; and — for this Journeyman repo — the **regression guard** (the eval harness) passes for any self-modification.
 
 If invoked with a TaskSpec, deliver against its acceptance tests, run the gate, and do not report success until it passes.
 
@@ -39,7 +39,7 @@ If invoked with a TaskSpec, deliver against its acceptance tests, run the gate, 
 
 ## 6. Knowledge boundary (two planes — ADR-0006)
 
-- **Project knowledge stays in the repo it belongs to.** When the platform builds a product, that product's specifics live in *that* repo, never in agent memory.
+- **Project knowledge stays in the repo it belongs to.** When the Journeyman builds a product, that product's specifics live in *that* repo, never in agent memory.
 - **Only generic, project-stripped craft** enters portable agent memory. Enforced by the distillation boundary in `dream/`.
 
 ## 7. Protected boundaries & safety (non-negotiable)
@@ -64,4 +64,4 @@ If invoked with a TaskSpec, deliver against its acceptance tests, run the gate, 
 
 ---
 
-*The platform is built to the standard it enforces. The same template that scaffolded this repo (`project/project-template/`) scaffolds every project the platform builds.*
+*The Journeyman is built to the standard it enforces. The same template that scaffolded this repo (`project/project-template/`) scaffolds every project the Journeyman builds.*

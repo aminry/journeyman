@@ -1,0 +1,61 @@
+# Phase −1 instance spec — worked example (MEDIUM tier)
+# This single file drives the agent's task AND generates the held-out contract suite.
+# See ../domain.md §2 (schema) and §3 (spec -> tests mapping).
+
+id: books
+title: Books catalog service
+tier: medium
+
+resource:
+  name: book
+  path: /books
+  fields:
+    - { name: id,             type: uuid,     generated: true, readonly: true }
+    - { name: title,          type: string,   required: true, min_len: 1, max_len: 200 }
+    - { name: author,         type: string,   required: true, min_len: 1, max_len: 120 }
+    - { name: isbn,           type: string,   required: true, unique: true, pattern: '^[0-9]{13}$' }
+    - { name: price_cents,    type: integer,  required: true, min: 0 }
+    - { name: published_year, type: integer,  required: true, min: 1450, max: 2026 }
+    - { name: genre,          type: enum,     required: true, values: [fiction, nonfiction, sci_fi, biography] }
+    - { name: in_stock,       type: boolean,  default: true }
+    - { name: created_at,     type: datetime, generated: true, readonly: true }
+
+endpoints:
+  create:
+    method: POST
+    path: /books
+    success: 201
+  get:
+    method: GET
+    path: /books/{id}
+    success: 200
+    missing: 404
+  list:
+    method: GET
+    path: /books
+    success: 200
+    pagination: { limit_param: limit, offset_param: offset, default_limit: 20, max_limit: 100 }
+    filters: [genre, in_stock]
+    sort: [published_year, price_cents]
+  update:
+    method: PATCH
+    path: /books/{id}
+    success: 200
+    missing: 404
+    partial: true
+  delete:
+    method: DELETE
+    path: /books/{id}
+    success: 204
+    missing: 404
+
+rules:
+  on_validation_error: 422       # body: { errors: [ { field, message } ] }
+  on_unique_conflict: 409        # duplicate isbn
+  timestamps_immutable: true
+
+business_rules: []               # none at medium tier; hard tier adds e.g. a status state machine
+
+# Boot/verify contract (see ../domain.md §1):
+#   ./run.sh starts the service on $PORT; GET /healthz returns 200 when ready.
+#   The harness boots it, runs the generated contract suite, then tears down.

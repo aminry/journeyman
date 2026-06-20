@@ -4,7 +4,7 @@ This document gives the high-level design narrative and links out to the detaile
 
 ## Thesis
 
-Treat the LLM as a fixed CPU and put all durable, growing competence in external, versioned stores. The platform's distinctive value is the layer *above* a strong coder: lifelong portable craft, a milestone-budget economic loop, and the governance that keeps self-modification safe. A subsystem is worth building only if it makes the *Nth* task in a domain cheaper and better than the 1st — and that claim is **tested in Phase −1 before the rest is built**.
+Treat the LLM as a fixed CPU and put all durable, growing competence in external, versioned stores. The Journeyman's distinctive value is the layer *above* a strong coder: lifelong portable craft, a milestone-budget economic loop, and the governance that keeps self-modification safe. A subsystem is worth building only if it makes the *Nth* task in a domain cheaper and better than the 1st — and that claim is **tested in Phase −1 before the rest is built**.
 
 ## The bet, stated plainly
 

@@ -10,7 +10,7 @@
 Execute in four phases, each gated by the previous:
 
 - **Phase −1 — Validate.** One agent, a flat skill library, no graph, no dreaming, no second agent. Run ~30 real tasks in one narrow domain and measure whether cost-per-task falls while quality holds. **If the curve doesn't bend, stop here** — the rest of the architecture is unjustified.
-- **Phase 0 — Seed.** Build the single-agent kernel plus the conservative dream job and regression guard. Build it inside a repository scaffolded from the **standard project template** (Section 11), so the platform is constructed under the same discipline it will later enforce.
+- **Phase 0 — Seed.** Build the single-agent kernel plus the conservative dream job and regression guard. Build it inside a repository scaffolded from the **standard project template** (Section 11), so the Journeyman is constructed under the same discipline it will later enforce.
 - **Phase 1 — Dogfood.** Task the seed with building its own non-critical tooling (dashboards, better retrieval, routing learner). Failures are free — no customers, no app review.
 - **Phase 2 — Product.** Point the matured system at one web product. Budget unlocks on verified milestones and real revenue.
 
@@ -22,8 +22,8 @@ Guiding rule: **the LLM is a fixed CPU; all durable, growing competence lives in
 
 - **Two knowledge planes, kept strictly separate.** *Agent knowledge* (generic, portable engineering craft) and *project knowledge* (everything specific to the system being built) are different things stored in different places. The agent's memory never holds project specifics. (Section 2.)
 - **Distillation boundary.** Only generic, project-stripped lessons cross from a project into agent memory. "How to test token-expiry edge cases" is agent knowledge; "this project's tokens expire in 15 minutes" is not.
-- **Professional discipline is enforced, not hoped for.** Every project — and the platform itself — is scaffolded with required docs, a code knowledge graph, tests, a build system, and a Definition-of-Done gate that blocks merges which break tests, drop coverage, or let documentation drift. (Section 11.)
-- **The platform is built to the standard it enforces.** The agent system's own repository uses the same project template, so it is dogfooding the discipline from commit zero.
+- **Professional discipline is enforced, not hoped for.** Every project — and the Journeyman itself — is scaffolded with required docs, a code knowledge graph, tests, a build system, and a Definition-of-Done gate that blocks merges which break tests, drop coverage, or let documentation drift. (Section 11.)
+- **The Journeyman is built to the standard it enforces.** The agent system's own repository uses the same project template, so it is dogfooding the discipline from commit zero.
 - **Validate before building.** No speculative subsystem (graph memory in the agent, multi-agent, custom models) is built until a concrete, measured need appears.
 - **Single agent until proven otherwise.** Add a second agent only when you can name a task a single agent provably cannot do. Coordination is a tax, not a free lunch.
 - **Coding is delegated to a coding effector (e.g., Claude Code), driven as a tool — not a second agent.** The agent does not hand-roll an agentic coding harness; it drives an existing one. The effector receives a spec with acceptance tests and its result is accepted only when the Definition-of-Done gate passes — its "done" is untrusted until verified. This keeps "single agent" intact: one engineer wielding a power tool, not two minds in a conversation. (Section 11A.)
@@ -75,7 +75,7 @@ flowchart TB
 
 ## 3. System overview
 
-Solid boxes are **seed** (Phase 0). Dashed boxes are **deferred** — built only when earned. Project Knowledge (Plane A) lives outside the platform, in each project repo.
+Solid boxes are **seed** (Phase 0). Dashed boxes are **deferred** — built only when earned. Project Knowledge (Plane A) lives outside the Journeyman, in each project repo.
 
 ```mermaid
 flowchart TB
@@ -323,7 +323,7 @@ Skill libraries accumulate technical debt as they grow — redundant implementat
 
 ## 11. Project knowledge & engineering discipline — Plane A (seed mechanism, enforced per project)
 
-Every project the system builds — and the platform itself — is constructed to professional standards, enforced structurally. This section is the machinery.
+Every project the system builds — and the Journeyman itself — is constructed to professional standards, enforced structurally. This section is the machinery.
 
 ### 11.1 The project brain (lives in the repo)
 - **`CLAUDE.md`** — the operating contract for any agent in this repo: conventions, how to run tests/build, architecture pointers, do/don't, the trust boundary.
@@ -344,7 +344,7 @@ Nothing merges unless:
 This is the same regression-guard pattern as Section 6, extended from "don't break the system" to "don't let docs/tests/graph fall out of sync." The agent cannot land work that degrades the project brain.
 
 ### 11.4 The standard project template
-One canonical template, used for every project the system builds **and** for the platform's own repository:
+One canonical template, used for every project the system builds **and** for the Journeyman's own repository:
 
 ```
 project-template/
@@ -389,7 +389,7 @@ At project completion a retrospective runs the distillation boundary (Section 7)
 
 ## 11A. The coding effector (Claude Code) — driven as a tool
 
-Coding is not hand-rolled inside the kernel. The agent drives an existing agentic coding harness — Claude Code — as a registered tool. This avoids rebuilding file-editing, repo navigation, sandboxed execution, and test-running (the same reasoning that says don't hand-roll a vector store), and it concentrates the platform's novel value on what sits *above* a strong coder: lifelong memory, a portable cross-project craft library, the milestone-budget economic loop, and the regression/distillation governance.
+Coding is not hand-rolled inside the kernel. The agent drives an existing agentic coding harness — Claude Code — as a registered tool. This avoids rebuilding file-editing, repo navigation, sandboxed execution, and test-running (the same reasoning that says don't hand-roll a vector store), and it concentrates the Journeyman's novel value on what sits *above* a strong coder: lifelong memory, a portable cross-project craft library, the milestone-budget economic loop, and the regression/distillation governance.
 
 **This is a tool, not a second agent.** The relationship is senior engineer → power tool, not engineer → colleague. Framing it as a tool is what keeps the "single agent until proven otherwise" principle intact and keeps the agent↔effector seam from becoming the multi-agent coordination surface the MAST taxonomy warns about. The discipline below is precisely the mitigation for that seam.
 
@@ -509,7 +509,7 @@ flowchart LR
 ```
 
 **Phase −1 — Validate.** Section 4. Gate: the cost curve bends.
-**Phase 0 — Seed.** Build Sections 5–16 minimally, single-agent, **inside a repo scaffolded from the standard template** so the platform is built under its own discipline. Stop when the system can take a task, load a project brain, retrieve, route, **drive the coding effector under the spec-in/verified-out contract**, run sandboxed code, write & test a generic skill, write agent memory, scaffold a project, pass the Definition-of-Done gate, dream conservatively, pass the regression guard, emit traces (including the effector boundary), and ask for approval.
+**Phase 0 — Seed.** Build Sections 5–16 minimally, single-agent, **inside a repo scaffolded from the standard template** so the Journeyman is built under its own discipline. Stop when the system can take a task, load a project brain, retrieve, route, **drive the coding effector under the spec-in/verified-out contract**, run sandboxed code, write & test a generic skill, write agent memory, scaffold a project, pass the Definition-of-Done gate, dream conservatively, pass the regression guard, emit traces (including the effector boundary), and ask for approval.
 **Phase 1 — Dogfood.** Feed the self-build backlog (Section 19), each a TaskSpec with acceptance tests. Only non-critical components are self-built.
 **Phase 2 — Product.** One web product; budget unlocks on verified milestones and real revenue.
 
@@ -573,7 +573,7 @@ Multi-agent and agent graph memory are not on this list — they are earned late
 
 Two repositories, both scaffolded from the same template:
 
-**The platform repository** (the agent system itself — built by Claude Code from the template, plus platform-specific directories):
+**The Journeyman repository** (the agent system itself — built by Claude Code from the template, plus Journeyman-specific directories):
 ```
 /CLAUDE.md /ARCHITECTURE.md /DESIGN.md /docs /codegraph /tests /build /ci /hooks   (from the template)
 /kernel        runtime, model_router, tool_registry, sandbox, event_bus   (protected)

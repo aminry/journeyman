@@ -7,7 +7,7 @@
     "the effector's result is accepted only when the gate passes; on failure the adapter surfaces the findings and does not report success",
     "the boundary emits an effector_session span with token/dollar cost, transcript reference, internal retry count, and the git diff",
     "the effector is invoked behind a stable interface so an alternate harness can be substituted without changing callers",
-    "passes the platform Definition-of-Done gate"
+    "passes the Journeyman Definition-of-Done gate"
   ],
   "verifiable": true,
   "constraints": ["effector output untrusted until the gate passes", "no broad standing credentials"],

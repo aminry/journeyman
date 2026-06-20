@@ -1,14 +1,14 @@
 # ci/definition_of_done.yaml
 #
-# The Definition-of-Done gate for the PLATFORM repo. CI and the pre-merge check
+# The Definition-of-Done gate for the Journeyman repo. CI and the pre-merge check
 # execute this file. "Done" means: every required gate passes — never a claim.
 # The coding effector's output is accepted only when this gate passes (SPEC §11A).
 #
-# This is the platform variant: the `regression-guard` gate is ENABLED, because a
+# This is the Journeyman variant: the `regression-guard` gate is ENABLED, because a
 # change here may modify the agent system itself.
 
 version: 1
-project: "platform"
+project: "journeyman"
 
 thresholds:
   coverage_min_percent: 80
@@ -88,7 +88,7 @@ gates:
     command: "{{SECRET_SCAN_CMD}}"   # wire to your scanner (e.g. gitleaks) during seed build
     required: true
 
-  # Platform-only: self-modifications must pass the rotating eval harness.
+  # Journeyman-only: self-modifications must pass the rotating eval harness.
   - id: regression-guard
     type: command
     description: Self-modifications must pass the rotating, held-out regression eval harness.

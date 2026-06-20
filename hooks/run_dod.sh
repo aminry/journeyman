@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Run the full Definition-of-Done gate locally. Mirrors ci/definition_of_done.yaml.
 # During the seed build, a generic runner should parse the YAML and execute each
-# gate by `type`. This script runs the platform's concrete commands directly so the
+# gate by `type`. This script runs the Journeyman's concrete commands directly so the
 # gate is usable from day one.
 set -uo pipefail
 cd "$(dirname "$0")/.."

@@ -1,6 +1,6 @@
 # CLAUDE.md — Operating contract for this repository
 
-> This file is the **operating contract** for any agent working in this repo — the platform agent, the coding effector (Claude Code), or a human. It is part of the project's *Plane A* knowledge: it lives here, with the code, and describes **this** system only. Read it before making changes. Scaffolding fills the `{{PLACEHOLDERS}}` (see `README.md`).
+> This file is the **operating contract** for any agent working in this repo — the Journeyman agent, the coding effector (Claude Code), or a human. It is part of the project's *Plane A* knowledge: it lives here, with the code, and describes **this** system only. Read it before making changes. Scaffolding fills the `{{PLACEHOLDERS}}` (see `README.md`).
 
 ## 1. What this repository is
 
@@ -71,4 +71,4 @@ If you are a coding effector invoked with a TaskSpec: deliver against its accept
 
 ---
 
-*This contract is identical in spirit for the platform's own repository and for every project the platform builds — the platform is built to the standard it enforces.*
+*This contract is identical in spirit for the Journeyman's own repository and for every project the Journeyman builds — the Journeyman is built to the standard it enforces.*

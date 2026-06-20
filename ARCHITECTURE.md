@@ -1,6 +1,6 @@
-# ARCHITECTURE.md — Platform component map
+# ARCHITECTURE.md — Journeyman component map
 
-This is the **living** map of the platform's structure, kept current by the Definition-of-Done gate. For full rationale and detail, see `docs/SPEC.md`. For decisions and their reasoning, see `docs/adr/`.
+This is the **living** map of the Journeyman's structure, kept current by the Definition-of-Done gate. For full rationale and detail, see `docs/SPEC.md`. For decisions and their reasoning, see `docs/adr/`.
 
 ## Layers and components
 

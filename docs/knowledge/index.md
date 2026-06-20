@@ -1,4 +1,4 @@
-# Project knowledge — platform
+# Project knowledge — Journeyman
 
 A linked markdown wiki for non-obvious, project-specific knowledge about THIS repo
 (gotchas, external-system quirks, conventions). Navigate by following links rather than

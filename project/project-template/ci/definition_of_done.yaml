@@ -103,13 +103,13 @@ gates:
     required: true
 
   # --------------------------------------------------------------------------
-  # Platform-only gate. Enabled in the platform's OWN repository, where a change
+  # Journeyman-only gate. Enabled in the Journeyman's OWN repository, where a change
   # may modify the agent system itself. Left disabled in built-product repos.
   # See Architecture Sections 6 and 7 (regression guard).
   # --------------------------------------------------------------------------
   - id: regression-guard
     type: command
-    description: Self-modifications must pass the rotating eval harness (platform repo only).
+    description: Self-modifications must pass the rotating eval harness (Journeyman repo only).
     command: "{{EVAL_HARNESS_CMD}}"
     required: false
     enabled: false
