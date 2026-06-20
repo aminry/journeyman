@@ -1,6 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://journeyman.local/schemas/phase-minus-1-results.json",
+  "$comment": "Pre-registration protocol v2 (additive, pre-first-experimental-run): adds the required run_kind discriminator + the harness_selftest decision constraint. See experiments/phase_minus_1/CHANGELOG.md.",
   "title": "Phase -1 Results",
   "type": "object",
   "required": ["protocol_version", "run_id", "run_kind", "started_at", "completed_at", "pins", "tasks", "aggregate", "decision"],

@@ -54,4 +54,4 @@ def test_estimate_cost() -> None:
 
 def test_default_run_config_is_a_runconfig() -> None:
     assert isinstance(DEFAULT_RUN_CONFIG, RunConfig)
-    assert DEFAULT_RUN_CONFIG.protocol_version == "v1"
+    assert DEFAULT_RUN_CONFIG.protocol_version == "v2"

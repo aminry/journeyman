@@ -153,7 +153,7 @@ def build_results(
     tasks: list[dict],
     aggregate: dict,
     decision: dict,
-    protocol_version: str = "v1",
+    protocol_version: str = "v2",
 ) -> dict[str, Any]:
     if run_kind not in ("experiment", "harness_selftest"):
         raise ValueError(f"run_kind must be 'experiment' or 'harness_selftest', got {run_kind!r}")

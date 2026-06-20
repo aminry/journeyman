@@ -1,9 +1,9 @@
 {
-  "protocol_version": "v1",
+  "protocol_version": "v2",
   "run_id": "spine_books",
   "run_kind": "harness_selftest",
-  "started_at": "2026-06-20T06:14:23Z",
-  "completed_at": "2026-06-20T06:14:24Z",
+  "started_at": "2026-06-20T07:02:49Z",
+  "completed_at": "2026-06-20T07:02:50Z",
   "pins": {
     "model_ids": [
       "claude-opus-4-8",
@@ -49,7 +49,7 @@
       "model_cost_usd": 0.0,
       "effector_cost_usd": 0.525,
       "total_cost_usd": 0.525,
-      "wall_clock_seconds": 1.086,
+      "wall_clock_seconds": 1.085,
       "dod_passed": true,
       "contract_passed": true,
       "contract_tests_passed": 52,
