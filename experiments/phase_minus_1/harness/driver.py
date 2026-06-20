@@ -84,6 +84,11 @@ class GateOutcome:
     effector_retries: int
     first_pass: bool
     failing_case_ids: list[str] = field(default_factory=list)
+    # A short excerpt of the effector's OWN boot/service log (not the contract suite), so
+    # reflection diagnoses the real failure (e.g. a boot crash) instead of guessing from
+    # case-ids alone (ADR-0020 reflect-input note). Held-out integrity is preserved: this
+    # is the effector's output; the project-strip lint + RE-ASK still guard genericness.
+    service_log_excerpt: str = ""
 
 
 @dataclass
@@ -580,7 +585,13 @@ def _reflect_user_message(spec, feature_tags, retrieved, incorporated, gate, lib
         f"gate: contract_passed={gate.contract_passed} dod_passed={gate.dod_passed} "
         f"retries={gate.effector_retries} first_pass={gate.first_pass} "
         f"failing_cases={gate.failing_case_ids}\n"
-        f"existing library craft ids: {library.ids()}\n\n"
+        + (
+            "effector boot/service log (the effector's OWN output — use it to diagnose the "
+            f"REAL failure, e.g. a boot crash):\n{gate.service_log_excerpt}\n"
+            if gate.service_log_excerpt
+            else ""
+        )
+        + f"existing library craft ids: {library.ids()}\n\n"
         "Canonical craft taxonomy — choose craft_id/target_id from THESE ids only (WRITE a "
         "not-yet-present one, UPDATE a present one; do not invent new ids):\n"
         f"{json.dumps(taxonomy_catalog(), indent=2)}\n\n"

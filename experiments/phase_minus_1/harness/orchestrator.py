@@ -75,6 +75,16 @@ def _now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _service_log_excerpt(path: Path, max_chars: int = 1500) -> str:
+    """The tail of the booted service's OWN log (uvicorn startup, tracebacks, boot errors)
+    for the driver's reflect context — the effector's output, never the contract suite, so
+    held-out integrity holds. Truncated to keep the driver call cheap."""
+    if not path.exists():
+        return ""
+    text = path.read_text(errors="ignore").strip()
+    return text[-max_chars:] if len(text) > max_chars else text
+
+
 def assert_craft_canonical(library) -> float:
     """Run-health guard (G1 condition 4): return the fraction of craft ids in the canonical
     taxonomy, and FAIL LOUD if any non-taxonomy id slipped in — a drift would silently blind
@@ -253,6 +263,7 @@ def run_one_task(
         effector_retries=session.retries,
         first_pass=first_pass,
         failing_case_ids=failing,
+        service_log_excerpt=_service_log_excerpt(artifacts_dir / "service.log"),
     )
 
     # --- E. reflect (ALWAYS runs -> driver-cost parity) -------------------- #

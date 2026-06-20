@@ -341,6 +341,39 @@ def test_anthropic_reflect_dedupes_to_update_when_canonical_present(tmp_path: Pa
     assert res.craft_item is not None and res.craft_item.version == "1.0.1"
 
 
+def test_anthropic_reflect_feeds_service_log_excerpt_to_the_driver() -> None:
+    """The driver must see the effector's own boot/service log so it diagnoses the REAL
+    failure (the pilot mis-blamed /healthz when the cause was 'uvicorn: not found'). The
+    log is the effector's output, not the contract suite — no held-out leak."""
+    rec: dict = {}
+    gate = GateOutcome(
+        contract_passed=False,
+        dod_passed=True,
+        effector_retries=0,
+        first_pass=False,
+        failing_case_ids=["boot:healthz"],
+        service_log_excerpt="run.sh: line 6: exec: uvicorn: not found",
+    )
+    drv = AnthropicDriver(
+        model="claude-sonnet-4-6",
+        fallback_model="claude-haiku-4-5",
+        temperature=0.0,
+        validated_against=VA,
+        last_validated="2026-06-20T00:00:00Z",
+        client=_FakeClient(_Resp("submit_reflection", {"action": "SKIP", "rationale": "x"}), rec),
+    )
+    drv.reflect(
+        spec=load_spec(ORDERS),
+        feature_tags=["rule:state_machine"],
+        retrieved=[],
+        incorporated=[],
+        gate=gate,
+        library=CraftLibrary(REPO / ".context" / "nx_svclog"),
+    )
+    sent = rec["messages"][0]["content"]
+    assert "uvicorn: not found" in sent  # the real boot error reached the driver
+
+
 def _leaky_reflection() -> dict:
     return {
         "action": "WRITE",

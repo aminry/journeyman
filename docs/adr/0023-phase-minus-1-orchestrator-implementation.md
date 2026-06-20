@@ -144,6 +144,35 @@ triggered. `torch_version` is now pinned alongside the bge revision + sentence-t
 version. A taxonomy-constrained re-pilot (`pilot_A2`) confirms G2 is non-null and all craft
 ids are canonical before the full 30×2 run is authorized.
 
+## Addendum (2026-06-20) — re-pilot fixes: boot-PATH + RE-ASK + reflect-input (ADR-0020 §1 Step E)
+
+`pilot_A2` confirmed Option A (G2 non-null, 100% canonical, real-run UPDATE/dedupe) but
+surfaced two more pre-full-run issues:
+
+**13. Boot env must expose Python console scripts (harness/env bug, not an effector miss).**
+All 3 pilot boot failures were the same: the effector wrote a correct bare `exec uvicorn
+app:app …` `run.sh`, but the `uvicorn` console script (from a `pip --user` install) was not
+on the booted service's PATH → `exec: uvicorn: not found`, before the app loaded (notes
+booted because it used `python3 -m uvicorn`). This would corrupt *both* arms at random, so
+`runner._boot` now prepends the Python scripts dirs (venv/base bin + user-base bin) to the
+boot PATH, as a normal venv would. Verified end-to-end with zero spend.
+
+**14. RE-ASK-on-leak instead of SKIP-drop (reflection-quality, ADR-0020 §4).** A reflection
+whose draft leaks an instance identifier is now RE-ASKed once (rewrite the same lesson
+generically) before SKIP, so a real lesson is recovered rather than dropped (the pilot's
+lint SKIP-drop biased coverage down). SKIP only if the re-ask still leaks. Token cost is
+summed across both calls.
+
+**15. Reflect-input = gate + a short service-log excerpt (ADR-0020 §1 Step E).** Reflection
+(Step E) previously saw only the gate's failing case-ids, so the driver *mis-attributed*
+the boot failures (it blamed `/healthz` when the real cause was `uvicorn: not found`).
+Reflection quality is the experiment's linchpin, so Step E's input now includes a short
+excerpt of the effector's **own** boot/service log. This is the effector's output, **not**
+the held-out contract suite (no teaching-to-the-test leak), and the project-strip lint +
+RE-ASK genericness guards still apply to whatever craft the driver then writes. An extended
+re-pilot (positions 1–6) validates the fixed boot env on real, diverse medium/hard services
+before the full 30×2 is authorized.
+
 ## Consequences
 
 - **Positive:** the embedding pin is fully reproducible and zero-cost; reuse is verified
