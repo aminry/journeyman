@@ -31,10 +31,14 @@ from typing import Any, Protocol
 
 from harness.craft import CraftItem
 from harness.reflection import (
+    TAXONOMY,
     canonical_for_feature,
     craft_templates_to_write,
+    is_canonical,
+    nearest_canonical_id,
     project_strip_lint,
     reflect_on_signal,
+    taxonomy_catalog,
     uncovered_relevant_craft_ids,
 )
 from harness.specschema import InstanceSpec
@@ -303,15 +307,21 @@ _COMPOSE_TOOL = {
     },
 }
 
+_CANONICAL_IDS = sorted(TAXONOMY)
+
 _REFLECT_TOOL = {
     "name": "submit_reflection",
-    "description": "Decide WRITE / UPDATE / SKIP a generic, project-stripped craft item.",
+    "description": (
+        "Decide WRITE a new / UPDATE an existing / SKIP a generic, project-stripped craft "
+        "item. craft_id and target_id MUST be one of the canonical taxonomy ids (one "
+        "canonical item per feature; evolve via UPDATE, do not invent new ids)."
+    ),
     "input_schema": {
         "type": "object",
         "properties": {
             "action": {"enum": ["WRITE", "UPDATE", "SKIP"]},
-            "craft_id": {"type": "string"},
-            "target_id": {"type": "string"},
+            "craft_id": {"enum": _CANONICAL_IDS},
+            "target_id": {"enum": _CANONICAL_IDS},
             "summary": {"type": "string"},
             "when_to_use": {"type": "string"},
             "body": {"type": "string"},
@@ -460,21 +470,32 @@ class AnthropicDriver:
                 model,
                 f"reflection rejected: craft would leak instance identifiers {leaks}",
             )
-        target_id = ti.get("target_id") if action == "UPDATE" else None
-        craft_id = ti.get("craft_id") or target_id or "unnamed-craft"
-        version = "1.0.0"
-        if action == "UPDATE" and target_id and target_id in set(library.ids()):
-            existing = library.read(target_id)
+        # Canonicalize the id to the taxonomy (G1 Option A): never persist a free-form id
+        # and never drop the lesson — remap to the nearest canonical item (ADR-0020 §4).
+        tags = list(ti.get("tags", []))
+        raw_id = ti.get("target_id") or ti.get("craft_id") or ""
+        craft_id = nearest_canonical_id(
+            raw_id, tags, ti.get("summary", ""), ti.get("when_to_use", "")
+        )
+        if not is_canonical(raw_id) and raw_id:
+            rationale = f"{rationale} [remapped {raw_id!r}->{craft_id!r}]"
+        # Presence-based dedupe: an id that already exists is an UPDATE (bump), not a
+        # duplicate WRITE — one canonical item per feature, evolved over time.
+        present_active = {cid for cid in library.ids() if library.read(cid).status == "active"}
+        if craft_id in present_active:
+            existing = library.read(craft_id)
             major, minor, patch = existing.version.split(".")
             version = f"{major}.{minor}.{int(patch) + 1}"
-            craft_id = target_id
+            final_action, target_id = "UPDATE", craft_id
+        else:
+            version, final_action, target_id = "1.0.0", "WRITE", None
         item = CraftItem(
             id=craft_id,
             kind="orchestration",
             summary=ti.get("summary", craft_id),
             when_to_use=ti.get("when_to_use", ""),
             body=body,
-            tags=list(ti.get("tags", [])),
+            tags=tags,
             tests=["driver-reflection"],
             version=version,
             scope="local",
@@ -483,7 +504,7 @@ class AnthropicDriver:
             validated_against=self._va(model),
             last_validated=self._last_validated,
         )
-        return ReflectResult(action, item, target_id, tin, tout, model, rationale)
+        return ReflectResult(final_action, item, target_id, tin, tout, model, rationale)
 
 
 _RETRYABLE_EXC_NAMES = {
@@ -538,6 +559,9 @@ def _reflect_user_message(spec, feature_tags, retrieved, incorporated, gate, lib
         f"retries={gate.effector_retries} first_pass={gate.first_pass} "
         f"failing_cases={gate.failing_case_ids}\n"
         f"existing library craft ids: {library.ids()}\n\n"
+        "Canonical craft taxonomy — choose craft_id/target_id from THESE ids only (WRITE a "
+        "not-yet-present one, UPDATE a present one; do not invent new ids):\n"
+        f"{json.dumps(taxonomy_catalog(), indent=2)}\n\n"
         "Decide WRITE a new generic playbook, UPDATE an existing one, or SKIP. "
         "Craft MUST be project-stripped (no resource/path/field names). Call submit_reflection."
     )

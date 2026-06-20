@@ -77,6 +77,7 @@ def build_inputs(args) -> RunInputs:
         )
         cfg.embedding_revision = embedder.revision
         cfg.sentence_transformers_version = embedder.sentence_transformers_version
+        cfg.torch_version = embedder.torch_version
         retriever = VectorCraftRetriever(library, embedder, k=cfg.retrieval_k)
     elif args.retriever == "deterministic":
         cfg.embedding_model = "deterministic-hash-512"
@@ -172,6 +173,12 @@ def _summary_md(result: OrchestratorResult) -> str:
         lines.append(
             f"| {a.record['task_id']} | {a.retrieved} | {a.reused} | {sel} | {gp} | {gr} |"
         )
+    lines += [
+        "",
+        "## Run-health: % craft ids in canonical taxonomy (must be 100%)",
+    ]
+    for a in result.tasks:
+        lines.append(f"- **{a.record['task_id']}**: {a.craft_canonical_pct:.0%} canonical")
     lines += [
         "",
         "## Retrieval-precision diagnostic (G2)",

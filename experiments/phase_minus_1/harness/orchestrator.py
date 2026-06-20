@@ -45,7 +45,7 @@ from harness.gold import GoldMap, RetrievalDiagnostic, retrieval_diagnostic, sum
 from harness.render import write_pytest_module
 from harness.results import build_results, build_task_record, validate_results
 from harness.retrieval import Retriever
-from harness.reflection import project_strip_lint
+from harness.reflection import canonical_fraction, project_strip_lint
 from harness.runconfig import RunConfig
 from harness.runner import (
     DodResult,
@@ -73,6 +73,20 @@ CONTROL = "control"
 
 def _now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def assert_craft_canonical(library) -> float:
+    """Run-health guard (G1 condition 4): return the fraction of craft ids in the canonical
+    taxonomy, and FAIL LOUD if any non-taxonomy id slipped in — a drift would silently blind
+    the curated G2 diagnostic, so we crash rather than spend a run with G2 dark."""
+    pct, rogue = canonical_fraction(library)
+    if rogue:
+        raise RuntimeError(
+            f"run-health: {len(rogue)} non-taxonomy craft id(s) in the library {rogue} "
+            f"({pct:.0%} canonical) — this would blind the curated G2 diagnostic. Failing "
+            "loud (G1 condition 4): align the driver to the taxonomy before proceeding."
+        )
+    return pct
 
 
 # --------------------------------------------------------------------------- #
@@ -126,6 +140,7 @@ class TaskArtifacts:
     reflect_action: str
     reflect_rationale: str
     craft_written: str | None
+    craft_canonical_pct: float
     diagnostic: RetrievalDiagnostic
     suite: SuiteResult
     dod: DodResult
@@ -268,6 +283,9 @@ def run_one_task(
         )
         quarantine_harmful(inputs.library, baseline)
 
+    # --- run-health: every craft id must stay canonical (fail loud, G1 condition 4) -- #
+    craft_canonical_pct = assert_craft_canonical(inputs.library)
+
     wall = time.monotonic() - t0
     completed_at = _now()
 
@@ -334,6 +352,7 @@ def run_one_task(
         reflect_action=reflect.action,
         reflect_rationale=reflect.rationale,
         craft_written=craft_written,
+        craft_canonical_pct=craft_canonical_pct,
         diagnostic=diagnostic,
         suite=suite,
         dod=dod,
@@ -370,6 +389,11 @@ def run_sequence(
     records = [a.record for a in tasks]
     diagnostics = [a.diagnostic for a in tasks]
     diag_summary = summarize_diagnostics(diagnostics)
+    # run-health (G1 condition 4): the worst per-task %-canonical (always 1.0 unless a
+    # drift slipped past assert_craft_canonical, which would already have raised).
+    diag_summary["craft_canonical_pct_min"] = min(
+        (a.craft_canonical_pct for a in tasks), default=1.0
+    )
 
     results_doc = build_results(
         run_id=run_id,

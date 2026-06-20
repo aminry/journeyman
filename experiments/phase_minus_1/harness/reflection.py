@@ -357,6 +357,55 @@ def feature_tag_to_craft_id(feature_tag: str) -> str | None:
     return _FEATURE_TO_CRAFT.get(feature_tag)
 
 
+_TOK = re.compile(r"[a-z0-9_]+")
+
+
+def is_canonical(craft_id: str) -> bool:
+    """True iff ``craft_id`` is one of the 13 canonical taxonomy ids (ADR-0020 §4)."""
+    return craft_id in TAXONOMY
+
+
+def taxonomy_catalog() -> list[dict]:
+    """The canonical craft vocabulary handed to the driver so it WRITEs/UPDATEs by a
+    canonical id (not a free-form one): id + feature_keys + when_to_use + universal."""
+    return [
+        {
+            "id": t.craft_id,
+            "feature_keys": list(t.feature_keys),
+            "when_to_use": t.when_to_use,
+            "universal": t.universal,
+        }
+        for t in TAXONOMY.values()
+    ]
+
+
+def nearest_canonical_id(
+    craft_id: str, tags: list[str] | tuple[str, ...] = (), summary: str = "", when_to_use: str = ""
+) -> str:
+    """Remap a possibly-non-canonical craft id to the NEAREST canonical taxonomy id.
+
+    The validate-against-taxonomy backstop (G1 Option A): never reject-and-drop a
+    reflection (that would lose a real lesson and bias coverage down) — always remap to
+    the closest canonical item. Deterministic: (1) pass through if already canonical;
+    (2) map via any feature tag the driver supplied; (3) otherwise pick the taxonomy item
+    with the greatest token overlap (ties broken by id). Always returns a taxonomy id."""
+    if craft_id in TAXONOMY:
+        return craft_id
+    for t in tags:
+        cid = _FEATURE_TO_CRAFT.get(t)
+        if cid is not None:
+            return cid
+    query = f"{craft_id} {' '.join(tags)} {summary} {when_to_use}".lower()
+    q = set(_TOK.findall(query))
+    best_id, best_score = None, -1
+    for cid, tpl in TAXONOMY.items():
+        doc = f"{cid} {' '.join(tpl.tags)} {' '.join(tpl.feature_keys)} {tpl.summary} {tpl.when_to_use}"
+        score = len(q & set(_TOK.findall(doc.lower())))
+        if score > best_score or (score == best_score and (best_id is None or cid < best_id)):
+            best_id, best_score = cid, score
+    return best_id  # type: ignore[return-value]  # TAXONOMY is non-empty
+
+
 def template_for_craft_id(craft_id: str) -> CraftTemplate:
     return TAXONOMY[craft_id]
 
@@ -386,6 +435,16 @@ def uncovered_relevant_craft_ids(feature_tags: list[str], library) -> list[str]:
 def craft_templates_to_write(feature_tags: list[str], library) -> list[CraftTemplate]:
     """The templates a fresh reflection would write for this instance, in order."""
     return [TAXONOMY[cid] for cid in uncovered_relevant_craft_ids(feature_tags, library)]
+
+
+def canonical_fraction(library) -> tuple[float, list[str]]:
+    """Run-health (G1 condition 4): (fraction of ACTIVE craft ids that are canonical
+    taxonomy ids, the sorted list of any non-canonical 'rogue' ids). Empty library = 1.0."""
+    active = [cid for cid in library.ids() if library.read(cid).status == "active"]
+    if not active:
+        return 1.0, []
+    rogue = sorted(c for c in active if c not in TAXONOMY)
+    return (len(active) - len(rogue)) / len(active), rogue
 
 
 def canonical_for_feature(feature_tag: str, library) -> CraftItem | None:

@@ -247,6 +247,82 @@ def test_anthropic_compose_builds_pinned_request_and_parses_incorporation() -> N
     assert res.tokens_in == 1200 and res.tokens_out == 300
 
 
+def test_reflect_tool_constrains_craft_id_to_taxonomy_enum() -> None:
+    from harness.driver import _REFLECT_TOOL
+    from harness.reflection import TAXONOMY
+
+    props = _REFLECT_TOOL["input_schema"]["properties"]
+    assert set(props["craft_id"]["enum"]) == set(TAXONOMY)
+    assert set(props["target_id"]["enum"]) == set(TAXONOMY)
+
+
+def test_anthropic_reflect_remaps_noncanonical_write_to_canonical(tmp_path: Path) -> None:
+    """The driver must never persist a free-form id: a non-canonical WRITE is remapped to
+    the nearest canonical taxonomy id (never dropped), restoring ADR-0020 §4 + G2 grading."""
+    out = {
+        "action": "WRITE",
+        "craft_id": "crud-medium-integer-validation-min",  # free-form, non-canonical
+        "summary": "generic pagination guidance",
+        "when_to_use": "list endpoints with paging",
+        "body": "Honor the window params and cap the page size.",
+        "tags": ["pagination"],  # the tag maps to the canonical pagination item
+        "rationale": "x",
+    }
+    drv = AnthropicDriver(
+        model="claude-sonnet-4-6",
+        fallback_model="claude-haiku-4-5",
+        temperature=0.0,
+        validated_against=VA,
+        last_validated="2026-06-20T00:00:00Z",
+        client=_FakeClient(_Resp("submit_reflection", out), {}),
+    )
+    res = drv.reflect(
+        spec=load_spec(BOOKS),
+        feature_tags=["pagination"],
+        retrieved=[],
+        incorporated=[],
+        gate=PASS,
+        library=CraftLibrary(tmp_path / "lib"),
+    )
+    assert res.action == "WRITE"
+    assert res.craft_item is not None and res.craft_item.id == "pagination-contract"  # remapped
+
+
+def test_anthropic_reflect_dedupes_to_update_when_canonical_present(tmp_path: Path) -> None:
+    """Presence-based dedupe: if the (canonicalized) id already exists, it's an UPDATE,
+    not a duplicate WRITE — re-arming the inert dedupe guardrail the pilot exposed."""
+    lib = CraftLibrary(tmp_path / "lib")
+    lib.write(_pag_item())  # pagination-contract @ 1.0.0 already present
+    out = {
+        "action": "WRITE",  # the model says WRITE, but the canonical id already exists
+        "craft_id": "novel-paging-thing",
+        "summary": "refined paging",
+        "when_to_use": "paging",
+        "body": "Cap the page size at the configured maximum.",
+        "tags": ["pagination"],
+        "rationale": "x",
+    }
+    drv = AnthropicDriver(
+        model="claude-sonnet-4-6",
+        fallback_model="claude-haiku-4-5",
+        temperature=0.0,
+        validated_against=VA,
+        last_validated="2026-06-20T00:00:00Z",
+        client=_FakeClient(_Resp("submit_reflection", out), {}),
+    )
+    res = drv.reflect(
+        spec=load_spec(BOOKS),
+        feature_tags=["pagination"],
+        retrieved=[_pag_item()],
+        incorporated=["pagination-contract"],
+        gate=PASS,
+        library=lib,
+    )
+    assert res.action == "UPDATE"
+    assert res.target_id == "pagination-contract"
+    assert res.craft_item is not None and res.craft_item.version == "1.0.1"
+
+
 def test_anthropic_reflect_rejects_leaky_craft_as_skip() -> None:
     """A reflection that leaks an instance identifier is forced to SKIP (lint guard),
     so harmful non-generic craft never reaches the library."""
@@ -286,7 +362,7 @@ def test_anthropic_reflect_write_builds_generic_schema_valid_craft(tmp_path: Pat
     spec = load_spec(BOOKS)
     clean = {
         "action": "WRITE",
-        "craft_id": "list-default-window-recipe",
+        "craft_id": "pagination-contract",  # a canonical taxonomy id
         "summary": "Apply the default page window when none is supplied.",
         "when_to_use": "When the list endpoint declares a default window.",
         "body": "Return the configured default window when no window is requested; cap it.",
@@ -310,7 +386,7 @@ def test_anthropic_reflect_write_builds_generic_schema_valid_craft(tmp_path: Pat
         library=CraftLibrary(tmp_path / "lib"),
     )
     assert res.action == "WRITE"
-    assert res.craft_item is not None and res.craft_item.id == "list-default-window-recipe"
+    assert res.craft_item is not None and res.craft_item.id == "pagination-contract"
     assert res.craft_item.generic is True
     assert "claude-sonnet-4-6" in res.craft_item.validated_against["models"]
     CraftLibrary(tmp_path / "lib2").write(res.craft_item)  # schema-valid + writable

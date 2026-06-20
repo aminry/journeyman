@@ -138,6 +138,12 @@ class BGEEmbedder:
         self.normalize = normalize
         self._model = SentenceTransformer(model_id, revision=revision)
         self.sentence_transformers_version = sentence_transformers.__version__
+        try:
+            import torch
+
+            self.torch_version = torch.__version__
+        except ImportError:  # pragma: no cover - torch ships with sentence-transformers
+            self.torch_version = None
         # Record the concrete revision actually loaded so the pin is reproducible.
         self.revision = revision or _resolve_hf_revision(model_id)
 

@@ -19,8 +19,11 @@ from harness.reflection import (
     canonical_for_feature,
     craft_templates_to_write,
     feature_tag_to_craft_id,
+    is_canonical,
+    nearest_canonical_id,
     project_strip_lint,
     reflect_on_signal,
+    taxonomy_catalog,
     template_for_craft_id,
     uncovered_relevant_craft_ids,
 )
@@ -154,6 +157,41 @@ def test_craft_templates_to_write_are_relevant_and_missing(tmp_path: Path) -> No
     assert "state-machine-playbook" in written
     assert "pagination-contract" in written
     assert "unique-409-recipe" in written
+
+
+# --- canonical-id constraint + remap backstop (G1 Option A) ---------------- #
+def test_is_canonical_matches_only_taxonomy_ids() -> None:
+    assert is_canonical("pagination-contract") is True
+    assert is_canonical("crud-easy-uuid-string-first-pass") is False  # a free-form driver id
+
+
+def test_taxonomy_catalog_lists_all_thirteen_with_guidance() -> None:
+    cat = taxonomy_catalog()
+    assert len(cat) == 13
+    ids = {c["id"] for c in cat}
+    assert ids == set(TAXONOMY)
+    for c in cat:
+        assert c["when_to_use"] and "feature_keys" in c and "universal" in c
+
+
+def test_nearest_canonical_passes_through_a_canonical_id() -> None:
+    assert nearest_canonical_id("state-machine-playbook") == "state-machine-playbook"
+
+
+def test_nearest_canonical_remaps_via_tag_mapping() -> None:
+    # a free-form id whose tags name a feature -> the canonical item for that feature
+    assert (
+        nearest_canonical_id("crud-medium-integer-validation-min", tags=["pagination"])
+        == "pagination-contract"
+    )
+
+
+def test_nearest_canonical_always_returns_a_taxonomy_id_never_drops() -> None:
+    # an utterly unknown id with no mapping tag still remaps (never None / never dropped)
+    out = nearest_canonical_id(
+        "totally-novel-thing", tags=[], summary="server health check boot route", when_to_use="boot"
+    )
+    assert out in TAXONOMY
 
 
 def test_canonical_for_feature_finds_existing_item(tmp_path: Path) -> None:
