@@ -1,0 +1,97 @@
+# ci/definition_of_done.yaml
+#
+# The Definition-of-Done gate for the PLATFORM repo. CI and the pre-merge check
+# execute this file. "Done" means: every required gate passes — never a claim.
+# The coding effector's output is accepted only when this gate passes (SPEC §11A).
+#
+# This is the platform variant: the `regression-guard` gate is ENABLED, because a
+# change here may modify the agent system itself.
+
+version: 1
+project: "platform"
+
+thresholds:
+  coverage_min_percent: 80
+  max_lint_warnings: 0
+  max_changed_files_without_adr: 50
+
+on_fail: block_merge
+on_pass: allow_merge
+report: trace            # each gate result emitted as a dod_gate span on the task trace
+
+gates:
+
+  - id: tests-unit
+    type: command
+    description: Unit tests pass.
+    command: "pytest tests/unit -q"
+    required: true
+
+  - id: tests-integration
+    type: command
+    description: Integration tests pass.
+    command: "pytest tests/integration -q"
+    required: true
+
+  - id: coverage
+    type: coverage
+    description: Coverage stays at or above the project threshold.
+    command: "pytest --cov --cov-report=term-missing -q"
+    min_percent: ${thresholds.coverage_min_percent}
+    required: true
+
+  - id: build
+    type: command
+    description: The project builds cleanly.
+    command: "python -m build"
+    required: true
+
+  - id: lint
+    type: command
+    description: Lint and format checks pass.
+    command: "ruff check . && black --check ."
+    max_warnings: ${thresholds.max_lint_warnings}
+    required: true
+
+  - id: docs-in-sync
+    type: docs_sync
+    description: >
+      Architectural changes must update docs in the same change: a new ADR or an
+      ARCHITECTURE.md update, unless the change declares `architecture-impact: none`.
+    required: true
+    runner: "python hooks/check_docs_sync.py"
+    architectural_paths:
+      - "kernel/**"
+      - "memory/**"
+      - "governance/**"
+      - "dream/**"
+      - "tools/**"
+      - "project/**"
+      - "pyproject.toml"
+    requires_one_of:
+      - new_file_matching: "docs/adr/*.md"
+      - updated_file: "ARCHITECTURE.md"
+    escape_hatch:
+      declaration: "architecture-impact: none"
+      blocked_if_changed_files_exceed: ${thresholds.max_changed_files_without_adr}
+
+  - id: code-graph-fresh
+    type: codegraph_fresh
+    description: The committed code graph reflects current code.
+    command: "hooks/regenerate_code_graph.sh --check"
+    artifact: "codegraph/graph.json"
+    required: true
+
+  - id: no-secrets
+    type: secret_scan
+    description: No credentials, tokens, or secrets committed.
+    command: "{{SECRET_SCAN_CMD}}"   # wire to your scanner (e.g. gitleaks) during seed build
+    required: true
+
+  # Platform-only: self-modifications must pass the rotating eval harness.
+  - id: regression-guard
+    type: command
+    description: Self-modifications must pass the rotating, held-out regression eval harness.
+    command: "python -m evals.run --rotating --held-out"
+    required: true
+    enabled: true

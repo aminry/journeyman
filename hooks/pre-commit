@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Git pre-commit hook. Install with: ln -s ../../hooks/pre-commit .git/hooks/pre-commit
+set -euo pipefail
+ROOT="$(git rev-parse --show-toplevel)"
+"$ROOT/hooks/regenerate_code_graph.sh" || true   # keep graph fresh before commit
+DOD_BASE_REF="${DOD_BASE_REF:-HEAD}" python "$ROOT/hooks/check_docs_sync.py"

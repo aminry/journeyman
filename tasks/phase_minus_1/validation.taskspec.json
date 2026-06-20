@@ -1,0 +1,15 @@
+{
+  "id": "task_phase_minus_1_validation",
+  "goal": "Build the minimal validation harness and run the 30-task sequence to test whether competence compounds (ADR-0002).",
+  "inputs": ["chosen verifiable domain", "30 task instances", "coding-effector adapter"],
+  "acceptance_tests": [
+    "harness runs one task end-to-end and logs cost (incl. effector), wall-clock, gate pass/fail, effector retries, prior-craft reuse count",
+    "a results report evaluates all three pass criteria: negative cost-per-task slope after warm-up; non-decreasing gate pass-rate with falling effector retries; measurable reuse of earlier orchestration craft",
+    "an explicit pass/stop decision is recorded"
+  ],
+  "verifiable": true,
+  "constraints": ["single agent", "no dream/graph/second-agent", "effector boundary instrumented"],
+  "budget_cap_usd": 400,
+  "requires_human_approval": false,
+  "related_adrs": ["0002", "0005"]
+}

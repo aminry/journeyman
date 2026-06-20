@@ -1,0 +1,115 @@
+# ci/definition_of_done.yaml
+#
+# The Definition-of-Done gate. CI and the pre-merge check execute this file.
+# "Done" means: every required gate below passes. Nothing else counts as done —
+# not a model's claim, not a human's assertion. The coding effector's output is
+# accepted only when this gate passes (see Architecture Section 11A).
+#
+# Scaffolding fills the {{PLACEHOLDER}} commands per language/stack.
+# The operator tunes the values under `thresholds`.
+
+version: 1
+project: "{{PROJECT_NAME}}"
+
+# ----------------------------------------------------------------------------
+# Operator-tunable thresholds (the judgment calls; everything else is mechanical)
+# ----------------------------------------------------------------------------
+thresholds:
+  coverage_min_percent: 80      # minimum line/branch coverage to merge
+  max_lint_warnings: 0          # lint warnings tolerated (0 = treat warnings as errors)
+  max_changed_files_without_adr: 50  # safety net: very large diffs always warrant an ADR
+
+# ----------------------------------------------------------------------------
+# Behavior
+# ----------------------------------------------------------------------------
+on_fail: block_merge            # a failed required gate blocks the merge
+on_pass: allow_merge
+report: trace                   # emit each gate result as a span on the task trace (kind: dod_gate)
+
+# ----------------------------------------------------------------------------
+# Gates — run in order; all `required: true` gates must pass.
+# `type` tells the runner how to interpret the gate.
+# ----------------------------------------------------------------------------
+gates:
+
+  - id: tests-unit
+    type: command
+    description: Unit tests pass.
+    command: "{{TEST_UNIT_CMD}}"
+    required: true
+
+  - id: tests-integration
+    type: command
+    description: Integration tests pass.
+    command: "{{TEST_INTEGRATION_CMD}}"
+    required: true
+
+  - id: coverage
+    type: coverage
+    description: Coverage stays at or above the project threshold.
+    command: "{{COVERAGE_CMD}}"          # must emit a coverage percentage the runner can parse
+    min_percent: ${thresholds.coverage_min_percent}
+    required: true
+
+  - id: build
+    type: command
+    description: The project builds cleanly.
+    command: "{{BUILD_CMD}}"
+    required: true
+
+  - id: lint
+    type: command
+    description: Lint and format checks pass.
+    command: "{{LINT_CMD}}"
+    max_warnings: ${thresholds.max_lint_warnings}
+    required: true
+
+  - id: docs-in-sync
+    type: docs_sync
+    description: >
+      Architectural changes must update documentation in the same change.
+      The runner inspects the changed paths; if any match `architectural_paths`
+      and the change neither adds a new ADR nor updates ARCHITECTURE.md, the gate
+      fails — unless the change explicitly declares `architecture-impact: none`.
+    required: true
+    architectural_paths:
+      - "src/**/api/**"
+      - "src/**/interfaces/**"
+      - "src/**/schema/**"
+      - "src/**/*public*"
+      - "build/**"
+      - "{{DEPENDENCY_MANIFEST}}"        # e.g. pyproject.toml, package.json
+    requires_one_of:
+      - new_file_matching: "docs/adr/*.md"
+      - updated_file: "ARCHITECTURE.md"
+    escape_hatch:
+      declaration: "architecture-impact: none"   # must appear in the change description
+      blocked_if_changed_files_exceed: ${thresholds.max_changed_files_without_adr}
+
+  - id: code-graph-fresh
+    type: codegraph_fresh
+    description: >
+      The committed code knowledge graph reflects the current code. The runner
+      regenerates the graph and fails if `codegraph/graph.json` would change,
+      i.e. it was not regenerated and committed with the change.
+    command: "{{CODEGRAPH_CMD}}"
+    artifact: "codegraph/graph.json"
+    required: true
+
+  - id: no-secrets
+    type: secret_scan
+    description: No credentials, tokens, or secrets committed.
+    command: "{{SECRET_SCAN_CMD}}"
+    required: true
+
+  # --------------------------------------------------------------------------
+  # Platform-only gate. Enabled in the platform's OWN repository, where a change
+  # may modify the agent system itself. Left disabled in built-product repos.
+  # See Architecture Sections 6 and 7 (regression guard).
+  # --------------------------------------------------------------------------
+  - id: regression-guard
+    type: command
+    description: Self-modifications must pass the rotating eval harness (platform repo only).
+    command: "{{EVAL_HARNESS_CMD}}"
+    required: false
+    enabled: false

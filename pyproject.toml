@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "platform"
+version = "0.0.0"
+description = "Self-extending agent system"
+requires-python = ">=3.11"
+readme = "README.md"
+dependencies = [
+  "pyyaml>=6",
+  # Seed build adds: model SDK(s), a vector/memory runtime, a sandbox, an event store.
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-cov>=5", "ruff>=0.5", "black>=24", "build>=1"]
+
+# The platform's source lives in the component packages (the seed-vs-deferred map
+# is in ARCHITECTURE.md). Claude Code finalizes packaging during the seed build.
+[tool.setuptools]
+packages = [
+  "kernel", "memory", "governance", "dream", "cognition",
+  "tools", "observability", "evals", "project",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests/unit", "tests/integration"]
+
+[tool.coverage.run]
+branch = true
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.black]
+line-length = 100
