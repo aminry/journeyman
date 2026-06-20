@@ -1,0 +1,278 @@
+"""Unit tests for the driver/orchestrator model layer (ADR-0020 §1-§4; T-1.3).
+
+The driver is the locus of "judgment that compounds". Two implementations behind one
+interface:
+
+* :class:`FakeDriver` — deterministic, zero-spend; drives the whole loop in CI so the
+  orchestrator/A-B harness is provable without real model calls. It still produces a
+  non-zero ``model_cost`` (the driver field must be first-class, ADR-0015).
+* :class:`AnthropicDriver` — the real Sonnet 4.6 (temp 0) + Haiku 4.5 fallback driver.
+  Tested here with an INJECTED fake client so request construction, structured parsing,
+  the project-strip guard, and the fallback path are proven with ZERO spend.
+
+Both share a BYTE-IDENTICAL frozen system prompt (the Run A/B parity invariant).
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from harness.craft import CraftItem, CraftLibrary
+from harness.driver import (
+    DRIVER_SYSTEM_PROMPT,
+    AnthropicDriver,
+    FakeDriver,
+    GateOutcome,
+    verify_incorporated,
+)
+from harness.reflection import template_for_craft_id
+from harness.specschema import load_spec
+
+REPO = Path(__file__).resolve().parents[2]
+INSTANCES = REPO / "experiments" / "phase_minus_1" / "instances"
+NOTES = INSTANCES / "e01_notes.spec.yaml"
+BOOKS = INSTANCES / "example_books.spec.yaml"
+ORDERS = INSTANCES / "h01_orders.spec.yaml"
+
+VA = {"models": ["claude-sonnet-4-6"], "effector_version": "claude-code-cli@test"}
+PASS = GateOutcome(
+    contract_passed=True, dod_passed=True, effector_retries=0, first_pass=True, failing_case_ids=[]
+)
+
+
+def _fake_driver() -> FakeDriver:
+    return FakeDriver(validated_against=VA, last_validated="2026-06-20T00:00:00Z")
+
+
+def _pag_item() -> CraftItem:
+    return template_for_craft_id("pagination-contract").to_craft_item(
+        validated_against=VA, last_validated="2026-06-20T00:00:00Z"
+    )
+
+
+# --- shared prompt --------------------------------------------------------- #
+def test_driver_system_prompt_is_frozen_and_nonempty() -> None:
+    assert isinstance(DRIVER_SYSTEM_PROMPT, str) and len(DRIVER_SYSTEM_PROMPT) > 50
+    assert _fake_driver().system_prompt == DRIVER_SYSTEM_PROMPT
+
+
+# --- compose --------------------------------------------------------------- #
+def test_compose_with_no_craft_produces_base_spec_only() -> None:
+    spec = load_spec(BOOKS)
+    res = _fake_driver().compose(spec=spec, retrieved=[])
+    assert res.incorporated == []
+    assert "<!-- craft:" not in res.taskspec_text
+    # the base TaskSpec is still the real spec + conventions (held-out: never tests)
+    assert "Specification" in res.taskspec_text
+    assert "compile_contract_suite" not in res.taskspec_text
+    assert res.tokens_in > 0 and res.tokens_out > 0
+
+
+def test_compose_incorporates_retrieved_craft_with_verifiable_markers() -> None:
+    spec = load_spec(BOOKS)
+    item = _pag_item()
+    res = _fake_driver().compose(spec=spec, retrieved=[item])
+    assert "pagination-contract" in res.incorporated
+    assert "<!-- craft:pagination-contract -->" in res.taskspec_text
+    # verified-incorporated: the declared ids whose marker actually appears
+    assert verify_incorporated(res.taskspec_text, res.incorporated) == ["pagination-contract"]
+
+
+def test_verify_incorporated_drops_unmarked_claims() -> None:
+    # a driver that *claims* incorporation without the guidance present must not count
+    assert verify_incorporated("no markers here", ["pagination-contract"]) == []
+
+
+def test_compose_cost_rises_with_more_craft() -> None:
+    spec = load_spec(BOOKS)
+    d = _fake_driver()
+    base = d.compose(spec=spec, retrieved=[])
+    withc = d.compose(spec=spec, retrieved=[_pag_item()])
+    assert withc.tokens_in > base.tokens_in
+
+
+# --- reflect (fake) -------------------------------------------------------- #
+def test_reflect_skips_when_no_signal(tmp_path: Path) -> None:
+    """Clean first-pass AND fully covered -> SKIP (the default; no library bloat)."""
+    lib = CraftLibrary(tmp_path)
+    # pre-cover everything relevant to NOTES so there is no uncovered feature
+    spec = load_spec(NOTES)
+    from harness.reflection import craft_templates_to_write
+
+    for tpl in craft_templates_to_write(["tier:easy", "crud"], lib):
+        lib.write(tpl.to_craft_item(validated_against=VA, last_validated="2026-06-20T00:00:00Z"))
+    res = _fake_driver().reflect(
+        spec=spec,
+        feature_tags=["tier:easy", "crud"],
+        retrieved=[],
+        incorporated=[],
+        gate=PASS,
+        library=lib,
+    )
+    assert res.action == "SKIP"
+    assert res.craft_item is None
+
+
+def test_reflect_writes_generic_craft_for_uncovered_feature(tmp_path: Path) -> None:
+    lib = CraftLibrary(tmp_path)
+    spec = load_spec(BOOKS)
+    res = _fake_driver().reflect(
+        spec=spec,
+        feature_tags=["tier:medium", "crud", "pagination", "unique"],
+        retrieved=[],
+        incorporated=[],
+        gate=PASS,
+        library=lib,
+    )
+    assert res.action == "WRITE"
+    assert res.craft_item is not None and res.craft_item.generic is True
+    # the written craft is project-stripped and schema-valid (library write validates)
+    lib.write(res.craft_item)
+
+
+def test_reflect_updates_existing_craft_when_effector_struggled(tmp_path: Path) -> None:
+    lib = CraftLibrary(tmp_path)
+    item = _pag_item()
+    lib.write(item)
+    spec = load_spec(BOOKS)
+    failed = GateOutcome(
+        contract_passed=False,
+        dod_passed=True,
+        effector_retries=2,
+        first_pass=False,
+        failing_case_ids=["pagination:max_limit"],
+    )
+    res = _fake_driver().reflect(
+        spec=spec,
+        feature_tags=["tier:medium", "crud", "pagination"],
+        retrieved=[item],
+        incorporated=["pagination-contract"],
+        gate=failed,
+        library=lib,
+    )
+    assert res.action == "UPDATE"
+    assert res.target_id == "pagination-contract"
+    # version bumped past the existing 1.0.0
+    assert res.craft_item is not None and res.craft_item.version != "1.0.0"
+
+
+# --- AnthropicDriver with an injected fake client (zero spend) ------------- #
+class _ToolUse:
+    type = "tool_use"
+
+    def __init__(self, name: str, inp: dict):
+        self.name = name
+        self.input = inp
+
+
+class _Usage:
+    def __init__(self, i: int, o: int):
+        self.input_tokens = i
+        self.output_tokens = o
+
+
+class _Resp:
+    def __init__(self, tool_name: str, tool_input: dict, i: int = 1200, o: int = 300):
+        self.content = [_ToolUse(tool_name, tool_input)]
+        self.usage = _Usage(i, o)
+        self.stop_reason = "tool_use"
+
+
+class _FakeMessages:
+    def __init__(self, resp, recorder: dict, fail: bool = False):
+        self._resp = resp
+        self._recorder = recorder
+        self._fail = fail
+
+    def create(self, **kwargs):
+        self._recorder.update(kwargs)
+        if self._fail:
+            raise RuntimeError("overloaded")
+        return self._resp
+
+
+class _FakeClient:
+    def __init__(self, resp, recorder: dict, fail: bool = False):
+        self.messages = _FakeMessages(resp, recorder, fail)
+
+
+def test_anthropic_compose_builds_pinned_request_and_parses_incorporation() -> None:
+    spec = load_spec(BOOKS)
+    item = _pag_item()
+    rec: dict = {}
+    resp = _Resp(
+        "submit_composition",
+        {"incorporated": [{"id": "pagination-contract", "note": "cap page size"}]},
+    )
+    drv = AnthropicDriver(
+        model="claude-sonnet-4-6",
+        fallback_model="claude-haiku-4-5",
+        temperature=0.0,
+        validated_against=VA,
+        last_validated="2026-06-20T00:00:00Z",
+        client=_FakeClient(resp, rec),
+    )
+    res = drv.compose(spec=spec, retrieved=[item])
+    # request is pinned: model, temperature, frozen system prompt, a forced tool
+    assert rec["model"] == "claude-sonnet-4-6"
+    assert rec["temperature"] == 0.0
+    assert rec["system"] == DRIVER_SYSTEM_PROMPT
+    assert rec["tool_choice"]["type"] == "tool"
+    # parsed + rendered with a verifiable marker; cost from usage
+    assert res.incorporated == ["pagination-contract"]
+    assert "<!-- craft:pagination-contract -->" in res.taskspec_text
+    assert res.tokens_in == 1200 and res.tokens_out == 300
+
+
+def test_anthropic_reflect_rejects_leaky_craft_as_skip() -> None:
+    """A reflection that leaks an instance identifier is forced to SKIP (lint guard),
+    so harmful non-generic craft never reaches the library."""
+    spec = load_spec(ORDERS)
+    rec: dict = {}
+    leaky = {
+        "action": "WRITE",
+        "craft_id": "bad-recipe",
+        "summary": "orders lifecycle",
+        "when_to_use": "for orders",
+        "body": "Drive the orders service: pending to paid to shipped.",
+        "tags": ["rule:state_machine"],
+        "rationale": "x",
+    }
+    drv = AnthropicDriver(
+        model="claude-sonnet-4-6",
+        fallback_model="claude-haiku-4-5",
+        temperature=0.0,
+        validated_against=VA,
+        last_validated="2026-06-20T00:00:00Z",
+        client=_FakeClient(_Resp("submit_reflection", leaky), rec),
+    )
+    res = drv.reflect(
+        spec=spec,
+        feature_tags=["rule:state_machine"],
+        retrieved=[],
+        incorporated=[],
+        gate=PASS,
+        library=CraftLibrary(REPO / ".context" / "nonexistent_ignore"),
+    )
+    assert res.action == "SKIP"
+    assert res.craft_item is None
+    assert "leak" in res.rationale.lower()
+
+
+def test_anthropic_falls_back_to_haiku_and_records_it(tmp_path: Path) -> None:
+    spec = load_spec(BOOKS)
+    rec: dict = {}
+    resp = _Resp("submit_composition", {"incorporated": []})
+    # primary client always fails; fallback client succeeds
+    drv = AnthropicDriver(
+        model="claude-sonnet-4-6",
+        fallback_model="claude-haiku-4-5",
+        temperature=0.0,
+        validated_against=VA,
+        last_validated="2026-06-20T00:00:00Z",
+        client=_FakeClient(resp, {}, fail=True),
+        fallback_client=_FakeClient(resp, rec),
+    )
+    res = drv.compose(spec=spec, retrieved=[])
+    assert rec["model"] == "claude-haiku-4-5"
+    assert res.model == "claude-haiku-4-5"
