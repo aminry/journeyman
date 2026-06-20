@@ -109,6 +109,41 @@ decoding, and the pilot is **marked superseded** — retained on disk for audit 
 excluded from the T-1.4 analysis (`is_real_experiment_decision` already ignores a
 3-task run; the supersession is recorded in the run's decision rationale).
 
+## Addendum (2026-06-20) — G1 pilot remediation: constrain the driver to the taxonomy
+
+The first real pilot (`pilot_A`, positions 1–3; retained as G1 evidence, excluded from
+T-1.4) passed the machinery + craft-quality checks but exposed one HIGH issue: the Sonnet
+driver wrote craft under **its own free-form ids** (e.g. `crud-easy-uuid-string-first-pass`)
+instead of the canonical taxonomy. Consequences: the curated G2 gold map (keyed to
+taxonomy ids) couldn't grade it (recall/precision null/0), and the dedupe guardrail
+(keyed to taxonomy ids) never fired (3 WRITEs, 0 UPDATEs → projected ~20–30 items over 30
+tasks vs the designed ~13). Operator decision: **Option A — constrain the driver to the 13
+canonical ids** (restores the locked ADR-0020 §4 design; free-form ids were also mildly
+anti-generic). Implemented as:
+
+**11. Canonical-id constraint + non-dropping remap backstop.** The driver's reflect tool
+constrains `craft_id`/`target_id` to an enum of the 13 canonical ids, and the canonical
+catalog (id + `feature_keys` + `when_to_use`) is injected into the compose/reflect context
+so the driver selects from it. A backstop (`nearest_canonical_id`) **remaps** any
+non-canonical id to the nearest canonical item (by feature tag, else token overlap) — it
+**never reject-and-drops** a reflection (dropping would lose a real lesson and bias
+coverage down). Dedupe is now **presence-based**: a (canonicalized) id already in the
+library becomes an **UPDATE** (version bump), absent becomes a **WRITE** — one canonical
+item per feature, evolved over time. Proven deterministically on the fakes (two
+same-feature tasks → one UPDATE, not two WRITEs); the merged item must stay
+canonical/generic/project-stripped/actionable, and G3 impact tracks its reuse.
+
+**12. Run-health: %-craft-canonical, fail-loud.** The orchestrator computes, per task, the
+fraction of library craft ids in the taxonomy and **raises** if it is below 100%
+(`assert_craft_canonical`) — so a future drift can never silently blind G2 mid-run again
+(the exact failure the pilot caught). Surfaced in the run summary + aggregate.
+
+These are driver-scaffolding + harness-guard changes, not an effector change; craft
+*quality* in the pilot was good, so the Opus-escalation gate (ADR-0020 §3) was **not**
+triggered. `torch_version` is now pinned alongside the bge revision + sentence-transformers
+version. A taxonomy-constrained re-pilot (`pilot_A2`) confirms G2 is non-null and all craft
+ids are canonical before the full 30×2 run is authorized.
+
 ## Consequences
 
 - **Positive:** the embedding pin is fully reproducible and zero-cost; reuse is verified
