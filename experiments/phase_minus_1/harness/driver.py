@@ -18,8 +18,9 @@ Invariants enforced here:
   appears, so reuse is not a gameable self-report (ADR-0020 §5).
 * **Held-out integrity** — the base TaskSpec is the deterministic spec+conventions
   (``build_taskspec``); the driver only *adds* generic craft. It never sees the tests.
-* **Project-stripped craft** — a reflection that leaks an instance identifier is forced
-  to SKIP (the lint guard), so non-generic craft never reaches the library.
+* **Project-stripped craft** — a reflection that leaks an instance identifier triggers a
+  RE-ASK (rewrite generically), not a silent drop; SKIP only if the re-ask still leaks, so
+  non-generic craft never reaches the library AND real lessons are not lost (G1 condition).
 """
 
 from __future__ import annotations
@@ -454,22 +455,43 @@ class AnthropicDriver:
         if action == "SKIP":
             return ReflectResult("SKIP", None, None, tin, tout, model, rationale or "skip")
 
-        body = ti.get("body", "")
-        # Lint guard: a reflection that leaks an instance identifier is forced to SKIP,
-        # so non-generic (potentially harmful) craft never reaches the library.
-        leaks = project_strip_lint(
-            f"{ti.get('summary', '')} {ti.get('when_to_use', '')} {body}", spec
-        )
-        if leaks:
-            return ReflectResult(
-                "SKIP",
-                None,
-                None,
-                tin,
-                tout,
-                model,
-                f"reflection rejected: craft would leak instance identifiers {leaks}",
+        def _leaks(t: dict) -> list[str]:
+            return project_strip_lint(
+                f"{t.get('summary', '')} {t.get('when_to_use', '')} {t.get('body', '')}", spec
             )
+
+        # RE-ASK on leak (never reject-and-drop a real lesson): if the draft leaks an
+        # instance identifier, ask once more to rewrite the SAME lesson generically. SKIP
+        # is the last resort, only if the re-ask still leaks (G1 condition; the pilot's
+        # lint SKIP-drop biased coverage down).
+        leaks = _leaks(ti)
+        if leaks:
+            reask = (
+                f"{user}\n\nYour previous draft leaked instance identifiers {leaks}. Rewrite "
+                "the SAME lesson generically — describe the failure mode and recipe without "
+                "naming any resource, path, or field from the instance. Call submit_reflection."
+            )
+            ti2, tin2, tout2, model = self._call(_REFLECT_TOOL, reask)
+            tin, tout = tin + tin2, tout + tout2
+            if ti2.get("action", "SKIP") == "SKIP":
+                return ReflectResult(
+                    "SKIP", None, None, tin, tout, model, ti2.get("rationale", "skip")
+                )
+            leaks2 = _leaks(ti2)
+            if leaks2:
+                return ReflectResult(
+                    "SKIP",
+                    None,
+                    None,
+                    tin,
+                    tout,
+                    model,
+                    f"reflection still leaked instance identifiers after re-ask: {leaks2}",
+                )
+            ti, action, rationale = ti2, ti2.get("action", "SKIP"), ti2.get("rationale", rationale)
+            if action == "SKIP":
+                return ReflectResult("SKIP", None, None, tin, tout, model, rationale or "skip")
+        body = ti.get("body", "")
         # Canonicalize the id to the taxonomy (G1 Option A): never persist a free-form id
         # and never drop the lesson — remap to the nearest canonical item (ADR-0020 §4).
         tags = list(ti.get("tags", []))

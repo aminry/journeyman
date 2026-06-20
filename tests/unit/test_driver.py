@@ -219,6 +219,24 @@ class _FlakyClient:
         self.messages = _FlakyMessages(resp, fail_times, exc)
 
 
+class _SeqMessages:
+    """Returns a SEQUENCE of responses across successive create() calls (for RE-ASK)."""
+
+    def __init__(self, responses: list):
+        self._responses = list(responses)
+        self.calls = 0
+
+    def create(self, **kwargs):
+        resp = self._responses[min(self.calls, len(self._responses) - 1)]
+        self.calls += 1
+        return resp
+
+
+class _SeqClient:
+    def __init__(self, responses: list):
+        self.messages = _SeqMessages(responses)
+
+
 def test_anthropic_compose_builds_pinned_request_and_parses_incorporation() -> None:
     spec = load_spec(BOOKS)
     item = _pag_item()
@@ -323,27 +341,40 @@ def test_anthropic_reflect_dedupes_to_update_when_canonical_present(tmp_path: Pa
     assert res.craft_item is not None and res.craft_item.version == "1.0.1"
 
 
-def test_anthropic_reflect_rejects_leaky_craft_as_skip() -> None:
-    """A reflection that leaks an instance identifier is forced to SKIP (lint guard),
-    so harmful non-generic craft never reaches the library."""
-    spec = load_spec(ORDERS)
-    rec: dict = {}
-    leaky = {
+def _leaky_reflection() -> dict:
+    return {
         "action": "WRITE",
-        "craft_id": "bad-recipe",
-        "summary": "orders lifecycle",
-        "when_to_use": "for orders",
-        "body": "Drive the orders service: pending to paid to shipped.",
+        "craft_id": "state-machine-playbook",
+        "summary": "lifecycle craft",
+        "when_to_use": "state machines",
+        "body": "Drive the lifecycle: enforce transitions; reject illegal ones.",
         "tags": ["rule:state_machine"],
         "rationale": "x",
     }
+
+
+def test_anthropic_reflect_reasks_on_leak_then_recovers_the_lesson() -> None:
+    """A leaked reflection is NOT dropped: the driver RE-ASKs once (rewrite generically)
+    and recovers the lesson, summing token cost across both calls (G1 condition; the lint
+    SKIP-drop biased coverage down in the pilot)."""
+    spec = load_spec(ORDERS)
+    leaky = dict(_leaky_reflection())
+    leaky["body"] = "Drive the order lifecycle: discount_cents must not exceed total_cents."
+    clean = dict(_leaky_reflection())
+    clean["body"] = "Enforce the lifecycle: reject illegal transitions with the conflict code."
+    client = _SeqClient(
+        [
+            _Resp("submit_reflection", leaky, i=900, o=200),
+            _Resp("submit_reflection", clean, i=400, o=150),
+        ]
+    )
     drv = AnthropicDriver(
         model="claude-sonnet-4-6",
         fallback_model="claude-haiku-4-5",
         temperature=0.0,
         validated_against=VA,
         last_validated="2026-06-20T00:00:00Z",
-        client=_FakeClient(_Resp("submit_reflection", leaky), rec),
+        client=client,
     )
     res = drv.reflect(
         spec=spec,
@@ -351,10 +382,40 @@ def test_anthropic_reflect_rejects_leaky_craft_as_skip() -> None:
         retrieved=[],
         incorporated=[],
         gate=PASS,
-        library=CraftLibrary(REPO / ".context" / "nonexistent_ignore"),
+        library=CraftLibrary(REPO / ".context" / "nonexistent_ignore_reask"),
     )
+    assert client.messages.calls == 2  # re-asked once
+    assert res.action == "WRITE"  # the lesson was recovered, not dropped
+    assert res.craft_item is not None and res.craft_item.id == "state-machine-playbook"
+    assert res.tokens_in == 1300 and res.tokens_out == 350  # cost summed across both calls
+
+
+def test_anthropic_reflect_skips_only_if_still_leaks_after_reask() -> None:
+    """SKIP is the last resort — only if the re-ask ALSO leaks (never silently lose more)."""
+    spec = load_spec(ORDERS)
+    leaky = dict(_leaky_reflection())
+    leaky["body"] = "Drive the orders service: discount_cents vs total_cents."
+    client = _SeqClient([_Resp("submit_reflection", leaky), _Resp("submit_reflection", leaky)])
+    drv = AnthropicDriver(
+        model="claude-sonnet-4-6",
+        fallback_model="claude-haiku-4-5",
+        temperature=0.0,
+        validated_against=VA,
+        last_validated="2026-06-20T00:00:00Z",
+        client=client,
+    )
+    res = drv.reflect(
+        spec=spec,
+        feature_tags=["rule:state_machine"],
+        retrieved=[],
+        incorporated=[],
+        gate=PASS,
+        library=CraftLibrary(REPO / ".context" / "nonexistent_ignore_reask2"),
+    )
+    assert client.messages.calls == 2  # tried the re-ask before giving up
     assert res.action == "SKIP"
     assert res.craft_item is None
+    assert "leak" in res.rationale.lower()
     assert "leak" in res.rationale.lower()
 
 

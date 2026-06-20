@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import os
 import socket
 import subprocess
 import time
@@ -61,12 +62,33 @@ def free_port() -> int:
         return s.getsockname()[1]
 
 
+def _python_script_dirs() -> list[str]:
+    """Directories holding Python console scripts (venv/base bin + user-base bin).
+
+    A ``pip --user`` install puts console scripts (e.g. ``uvicorn``) in the user-base bin,
+    which may not be on PATH. The booted service must still resolve a bare ``uvicorn`` in
+    its ``run.sh`` (as it would in a normal venv), so the harness puts these dirs on the
+    boot PATH. Returns only existing dirs, de-duplicated."""
+    import site
+    import sysconfig
+
+    candidates = [sysconfig.get_path("scripts"), os.path.join(site.getuserbase(), "bin")]
+    out: list[str] = []
+    for d in candidates:
+        if d and os.path.isdir(d) and d not in out:
+            out.append(d)
+    return out
+
+
 def _boot(repo_dir: Path, port: int, log_path: Path) -> subprocess.Popen:
     env = {
         **_clean_env(),
         "PORT": str(port),
         "SERVICE_DB": str(repo_dir / "service.db"),
     }
+    # Make Python console scripts (uvicorn, ...) resolvable for a bare-command run.sh,
+    # matching a normal venv. Prepend so the service's interpreter env wins (T-1.3 fix).
+    env["PATH"] = os.pathsep.join([*_python_script_dirs(), env.get("PATH", "")])
     log = log_path.open("w")
     proc = subprocess.Popen(
         ["bash", "run.sh"], cwd=str(repo_dir), env=env, stdout=log, stderr=subprocess.STDOUT
@@ -76,8 +98,6 @@ def _boot(repo_dir: Path, port: int, log_path: Path) -> subprocess.Popen:
 
 
 def _clean_env() -> dict:
-    import os
-
     return dict(os.environ)
 
 
