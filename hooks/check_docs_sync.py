@@ -12,6 +12,7 @@ Exit codes: 0 = pass, 1 = violation, 2 = usage/config error.
 
 Dependencies: PyYAML. Git available on PATH.
 """
+
 from __future__ import annotations
 
 import fnmatch
@@ -91,9 +92,7 @@ def main() -> int:
         return 0
 
     # Otherwise require a new ADR or an ARCHITECTURE.md update.
-    added_adr = any(
-        fnmatch.fnmatch(f, "docs/adr/*.md") and "template" not in f for f in files
-    )
+    added_adr = any(fnmatch.fnmatch(f, "docs/adr/*.md") and "template" not in f for f in files)
     touched_arch = any(f == "ARCHITECTURE.md" for f in files)
     if added_adr or touched_arch:
         print("docs_sync: architectural change documented (ADR or ARCHITECTURE.md); pass")

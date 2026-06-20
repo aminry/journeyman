@@ -1,0 +1,24 @@
+{
+  "id": "task_t0_wire_dod_gates",
+  "goal": "Wire the Definition-of-Done gates that are still stubbed in the Journeyman repo so hooks/run_dod.sh can pass in full.",
+  "context": "T-1.1 (the Phase -1 harness) made the wired, relevant gates pass for its change (unit+integration tests, coverage, ruff+black lint, docs-in-sync via ADR-0019, code-graph-fresh). Several gates referenced by ci/definition_of_done.yaml are not yet wired and currently fail or pass vacuously, independent of any change. This task tracks that debt so it is not forgotten (per the operator's instruction on T-1.1).",
+  "unwired_gates": [
+    "regression-guard: `python -m evals.run --rotating --held-out` — the evals.run module does not exist yet (Phase-0 T0.10; evals/ is a protected path). MUST NOT be stubbed as a no-op.",
+    "no-secrets: SECRET_SCAN_CMD is a {{PLACEHOLDER}} — wire a real scanner (e.g. gitleaks).",
+    "code-security: SAST_CMD / SCA_CMD are {{PLACEHOLDERS}} — wire SAST + dependency audit (ADR-0010).",
+    "code-graph-fresh: CODEGRAPH_CMD is unset, so hooks/regenerate_code_graph.sh --check passes vacuously — wire the code-graph indexer (SPEC §11, T0.7).",
+    "lint tooling: ruff/black must be on PATH in CI (added to [dev]; install via `pip install -e .[dev]`).",
+    "build: the repo-root `build/` directory shadows the `build` PyPI package, so `python -m build` from the repo root fails to resolve the module — invoke the builder out-of-tree (e.g. `pyproject-build`) or rename the directory when wiring the build gate."
+  ],
+  "acceptance_tests": [
+    "hooks/run_dod.sh exits 0 on a clean tree with every required gate actually executing (no vacuous passes)",
+    "regression-guard runs the rotating, held-out eval harness and blocks on failure",
+    "secret scan, SAST, and SCA run on the diff and fail-closed on findings at/above block_severity",
+    "code-graph-fresh regenerates codegraph/graph.json via a real indexer and fails on staleness"
+  ],
+  "verifiable": true,
+  "constraints": ["evals/, ci/, security/ are protected paths — changes require human review", "do not weaken any gate to make it pass"],
+  "budget_cap_usd": 40,
+  "requires_human_approval": true,
+  "related_adrs": ["0008", "0010", "0019"]
+}
