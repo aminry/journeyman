@@ -42,14 +42,25 @@ def api_conventions(spec: InstanceSpec) -> str:
         "- The collection endpoint returns a JSON array of entities (not wrapped).",
     ]
     if lst and lst.filters:
-        lines.append(
-            f"- Filtering: ?<field>=<value> for fields {lst.filters} " "(booleans as true/false)."
+        filter_line = (
+            f"- Filtering: ?<field>=<value> for fields {lst.filters} (booleans as true/false)."
         )
+        if len(lst.filters) >= 2:
+            filter_line += (
+                " Multiple filters AND together — a row must match EVERY supplied filter "
+                "(e.g. ?a=x&b=y returns only rows matching both)."
+            )
+        lines.append(filter_line)
     if lst and lst.sort:
-        lines.append(
-            f"- Sorting: ?sort=<field> ascending, ?sort=-<field> descending, "
-            f"for fields {lst.sort}."
+        sort_line = (
+            f"- Sorting: ?sort=<field> ascending, ?sort=-<field> descending, for fields {lst.sort}."
         )
+        if len(lst.sort) >= 2:
+            sort_line += (
+                " Composite sort ?sort=f1,-f2 applies keys in order (primary, then tie-break); "
+                "a leading - means descending for that key."
+            )
+        lines.append(sort_line)
     if lst and lst.pagination:
         p = lst.pagination
         lines.append(
@@ -107,6 +118,28 @@ def business_rules_conventions(spec: InstanceSpec) -> str:
     return "\n".join(lines) + "\n"
 
 
+def endpoint_to_dict(e) -> dict:
+    """Serialise an endpoint with ALL its requirements (pagination/filters/sort), so the
+    structured spec the effector receives matches spec.json rather than relying on prose."""
+    d: dict = {"method": e.method, "path": e.path, "success": e.success}
+    if e.missing is not None:
+        d["missing"] = e.missing
+    if e.partial:
+        d["partial"] = e.partial
+    if e.pagination:
+        d["pagination"] = {
+            "limit_param": e.pagination.limit_param,
+            "offset_param": e.pagination.offset_param,
+            "default_limit": e.pagination.default_limit,
+            "max_limit": e.pagination.max_limit,
+        }
+    if e.filters:
+        d["filters"] = e.filters
+    if e.sort:
+        d["sort"] = e.sort
+    return d
+
+
 def _fields_yaml(resource) -> list[dict]:
     return [
         {
@@ -144,10 +177,7 @@ def build_taskspec(spec: InstanceSpec, retrieved_craft: list[CraftItem]) -> str:
             "path": spec.resource.path,
             "fields": _fields_yaml(spec.resource),
         },
-        "endpoints": {
-            e.kind: {"method": e.method, "path": e.path, "success": e.success}
-            for e in spec.endpoints.present()
-        },
+        "endpoints": {e.kind: endpoint_to_dict(e) for e in spec.endpoints.present()},
     }
     # Hard tier: the business rules and the second (related) resource MUST drive the
     # effector — they are part of the spec, not the held-out oracle.
@@ -158,10 +188,7 @@ def build_taskspec(spec: InstanceSpec, retrieved_craft: list[CraftItem]) -> str:
             "name": spec.related.resource.name,
             "path": spec.related.resource.path,
             "fields": _fields_yaml(spec.related.resource),
-            "endpoints": {
-                e.kind: {"method": e.method, "path": e.path, "success": e.success}
-                for e in spec.related.endpoints.present()
-            },
+            "endpoints": {e.kind: endpoint_to_dict(e) for e in spec.related.endpoints.present()},
         }
     spec_yaml = yaml.safe_dump(spec_obj, sort_keys=False)
 

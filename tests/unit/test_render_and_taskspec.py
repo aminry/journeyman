@@ -137,6 +137,22 @@ def test_api_conventions_cover_filters_and_sort(spec) -> None:
     assert "published_year" in conv
 
 
+def test_api_conventions_state_multi_filter_and_composite_sort(spec) -> None:
+    # books has 2 filters + 2 sorts -> the oracle tests AND-conjunction and composite
+    # sort, so the effector-facing conventions must state both (else the spec under-
+    # specifies what the held-out suite asserts).
+    conv = api_conventions(spec)
+    assert "AND together" in conv  # multi-filter conjunction
+    assert "Composite sort" in conv and "?sort=f1,-f2" in conv
+
+
+def test_taskspec_endpoint_block_carries_list_requirements(spec) -> None:
+    # the structured spec block must carry pagination/filters/sort (not prose alone)
+    ts = build_taskspec(spec, retrieved_craft=[])
+    assert "pagination" in ts and "default_limit" in ts and "max_limit" in ts
+    assert "filters" in ts and "sort" in ts
+
+
 def test_taskspec_conveys_business_rules_and_related_resource() -> None:
     hard = parse_spec(HARD_SPEC)
     ts = build_taskspec(hard, retrieved_craft=[])

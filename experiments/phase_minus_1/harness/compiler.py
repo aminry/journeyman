@@ -119,9 +119,11 @@ def _hi_lo(fa: Field, fb: Field) -> tuple[Any, Any]:
         return ("2026-09-15T00:00:00Z", "2026-02-01T00:00:00Z")
     lo = max(fa.min if fa.min is not None else 0, fb.min if fb.min is not None else 0)
     caps = [c for c in (fa.max, fb.max) if c is not None]
-    hi = min(lo + 1000, min(caps)) if caps else lo + 1000
+    cap = min(caps) if caps else lo + 1000
+    hi = min(lo + 1000, cap)
     if hi <= lo:
-        hi = lo + 1
+        # Bump for a clear high/low — but never above either field's declared max.
+        hi = min(lo + 1, cap)
     if fa.type == "number" or fb.type == "number":
         return (float(hi), float(lo))
     return (int(hi), int(lo))
@@ -996,7 +998,7 @@ def _cross_field_cases(spec: InstanceSpec, nxt: SeedFn, rule: CrossFieldRule) ->
             )
         return _ok()
 
-    return [
+    cases = [
         ContractCase(
             f"cross_field:violation:{a}",
             "cross_field",
@@ -1012,6 +1014,36 @@ def _cross_field_cases(spec: InstanceSpec, nxt: SeedFn, rule: CrossFieldRule) ->
             expected_status=create.success,
         ),
     ]
+
+    # A PATCH must not be able to escape the cross-field constraint by NULLing one side:
+    # the operands are required, so clearing one via PATCH must be rejected (422). Without
+    # this, a service that skips the check on a null operand would pass silently.
+    up = spec.endpoints.update
+    if up is not None and fa.required:
+        err = spec.rules.on_validation_error
+
+        def run_patch_null(api: Api) -> CaseResult:
+            r = api.create(api.payload(nxt()))
+            if r.status_code != create.success:
+                return _fail(f"setup create failed: {r.status_code}")
+            ident = r.json()[api.id_field]
+            u = api.update(ident, {a: None})
+            if u.status_code != err:
+                return _fail(
+                    f"PATCH {a}=null (required cross-field operand): expected {err}, got {u.status_code}"
+                )
+            return _ok()
+
+        cases.append(
+            ContractCase(
+                f"cross_field:patch_null:{a}",
+                "cross_field",
+                run_patch_null,
+                field=a,
+                expected_status=err,
+            )
+        )
+    return cases
 
 
 def _composite_unique_cases(

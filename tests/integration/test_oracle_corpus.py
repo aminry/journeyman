@@ -18,6 +18,7 @@ import yaml
 from fastapi.testclient import TestClient
 
 from harness.compiler import compile_contract_suite, run_suite
+from harness.payloads import valid_value
 from harness.reference.service import (
     BUG_ALLOW_ILLEGAL_TRANSITION,
     BUG_IGNORE_SECONDARY_FILTER,
@@ -25,6 +26,7 @@ from harness.reference.service import (
     BUG_SKIP_COMPOSITE_UNIQUE,
     BUG_SKIP_CROSS_FIELD,
     BUG_SKIP_PARENT_CHECK,
+    BUG_SKIP_REQUIRED,
     build_app,
 )
 from harness.specschema import load_spec
@@ -145,3 +147,35 @@ def test_hard_multi_filter_and_multi_sort_strict():
         "h01_orders.spec.yaml", BUG_IGNORE_SECONDARY_FILTER, lambda c: c.id == "list:filter:multi"
     )
     _check("h01_orders.spec.yaml", BUG_IGNORE_SECONDARY_SORT, lambda c: c.id == "list:sort:multi")
+
+
+def test_datetime_cross_field_patch_null_escape_is_caught():
+    # A PATCH that NULLs a required datetime cross-field operand must be rejected; a
+    # service that skips required-validation (and so allows the null) is caught by the
+    # cross_field:patch_null case (the escape the adversarial review surfaced).
+    for spec_name, ref in (
+        ("h02_reservations.spec.yaml", "end_at"),
+        ("h09_appointments.spec.yaml", "end_at"),
+    ):
+        _, result = _spec_and_result(INSTANCES / spec_name, bugs=frozenset({BUG_SKIP_REQUIRED}))
+        assert f"cross_field:patch_null:{ref}" in set(result.failed_ids)
+
+
+def test_all_corpus_patterns_are_generator_satisfiable():
+    # Regression guard: every declared regex pattern must be one the payload generator
+    # can satisfy, else the "valid" boundary probe sends a non-matching value and a
+    # correct service would (wrongly) fail it. Also confirm the invalid probe is rejected.
+    import re
+
+    for path in SPEC_PATHS:
+        spec = load_spec(path)
+        resources = [spec.resource] + ([spec.related.resource] if spec.related else [])
+        for res in resources:
+            for f in res.fields:
+                if f.pattern:
+                    val = valid_value(f, 7)
+                    assert re.match(f.pattern, str(val)), (
+                        f"{path.name}:{f.name} pattern {f.pattern!r} not satisfied by "
+                        f"generated value {val!r}"
+                    )
+                    assert not re.match(f.pattern, "!!not-matching!!")

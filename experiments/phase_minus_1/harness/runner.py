@@ -45,7 +45,7 @@ from harness.results import (
 from harness.runconfig import RunConfig
 from harness.scaffolder import scaffold_repo
 from harness.specschema import InstanceSpec, load_spec
-from harness.taskspec import build_taskspec
+from harness.taskspec import build_taskspec, endpoint_to_dict
 
 _TRACE_SCHEMA = Path(__file__).resolve().parents[3] / "observability" / "trace-schema.json"
 _HEALTH_TIMEOUT_S = 30.0
@@ -408,30 +408,7 @@ def _resource_dict(resource) -> dict:
 
 
 def _endpoints_dict(endpoints) -> dict:
-    return {
-        e.kind: {
-            "method": e.method,
-            "path": e.path,
-            "success": e.success,
-            **({"missing": e.missing} if e.missing is not None else {}),
-            **({"partial": e.partial} if e.partial else {}),
-            **(
-                {
-                    "pagination": {
-                        "limit_param": e.pagination.limit_param,
-                        "offset_param": e.pagination.offset_param,
-                        "default_limit": e.pagination.default_limit,
-                        "max_limit": e.pagination.max_limit,
-                    }
-                }
-                if e.pagination
-                else {}
-            ),
-            **({"filters": e.filters} if e.filters else {}),
-            **({"sort": e.sort} if e.sort else {}),
-        }
-        for e in endpoints.present()
-    }
+    return {e.kind: endpoint_to_dict(e) for e in endpoints.present()}
 
 
 def _spec_to_dict(spec: InstanceSpec) -> dict:

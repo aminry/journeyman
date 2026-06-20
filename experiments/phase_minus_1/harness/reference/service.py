@@ -296,6 +296,12 @@ def build_app(spec: dict, bugs: frozenset[str] = frozenset(), db_path: str = ":m
                     errors.append({"field": name, "message": "field is required"})
                 continue
             v = payload[name]
+            if v is None:
+                # An explicit null for a required field clears it — reject (even on PATCH),
+                # else a cross-field/required constraint could be escaped by nulling a side.
+                if f.get("required") and BUG_SKIP_REQUIRED not in bugs:
+                    errors.append({"field": name, "message": "must not be null"})
+                continue
             if BUG_SKIP_CONSTRAINTS in bugs:
                 continue
             t = f.get("type")
