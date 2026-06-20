@@ -58,6 +58,30 @@ Critical actions require the operator to re-authenticate outside the model
 conversation. The execution component validates the step-up result, not the
 model.
 
+## Scalable Oversight And Spot-Checks
+
+Human review must not silently degrade as task volume grows (ADR-0016).
+
+- **Risk-weighted fractional sampling.** Spot-checks of self-modifications and
+  medium-risk actions are a *fraction*, not a fixed count; sampling probability
+  rises with risk, novelty, blast radius, and cost. High and critical classes are
+  always reviewed.
+- **Bounded review rate, fail-closed overflow.** A maximum human-review rate is
+  declared. If the queue exceeds capacity, high-impact work blocks and escalates;
+  it never auto-proceeds.
+- **Anti-automation-bias.** For sampled self-modifications and high-impact
+  approvals, the reviewer records an independent judgment *before* seeing the
+  agent's rationale; the preview surfaces the agent's own uncertainty and any
+  dissenting signal.
+
+## Novel / Ambiguous Actions
+
+A registered tool invoked with parameters that do not match a known-safe pattern,
+or any action whose risk class is ambiguous, escalates to approval rather than
+executing. The tool registry is already default-deny for *unregistered* tools;
+this closes the *registered-but-used-novelly* case (ADR-0016,
+`security/tool-policy.yaml`).
+
 ## Policy Changes
 
 Changes to this file, `approval-record.schema.json`, or any tool risk

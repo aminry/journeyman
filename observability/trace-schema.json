@@ -39,7 +39,12 @@
               "dod_gate",
               "effector_session",
               "security_event",
-              "cost_check"
+              "cost_check",
+              "dream_cycle",
+              "eval_run",
+              "maintenance",
+              "verification",
+              "runtime_ops"
             ]
           },
           "actor": { "type": "string" },
@@ -60,6 +65,12 @@
           "cost_usd": { "type": "number", "minimum": 0 },
           "retry_count": { "type": "integer", "minimum": 0 },
           "decision": { "type": "string" },
+          "cost_category": {
+            "enum": ["task_time", "overhead", "runtime_ops"],
+            "description": "task_time vs amortized off-duty overhead (dream/eval/guard/maintenance) vs production ops; for the TCO viability metric (ADR-0015)."
+          },
+          "verification_outcome": { "enum": ["approved", "rejected", "changes_requested"] },
+          "reviewer_source_class": { "enum": ["different_model_family", "human", "tool", "execution"] },
           "source_labels": {
             "type": "array",
             "items": { "type": "string" }
@@ -89,7 +100,9 @@
         "total_cost_usd": { "type": "number", "minimum": 0 },
         "model_cost_usd": { "type": "number", "minimum": 0 },
         "effector_cost_usd": { "type": "number", "minimum": 0 },
-        "tool_cost_usd": { "type": "number", "minimum": 0 }
+        "tool_cost_usd": { "type": "number", "minimum": 0 },
+        "overhead_cost_usd": { "type": "number", "minimum": 0 },
+        "runtime_ops_cost_usd": { "type": "number", "minimum": 0 }
       }
     }
   }

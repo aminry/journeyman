@@ -30,15 +30,18 @@ improvements, or random variation rather than reusable craft.
 
 ## Run Modes
 
-Run A is the treatment run. Optional Run B is the baseline/control.
+Run A is the treatment run. Run B is the baseline/control and is **mandatory for
+a full pass** (ADR-0017).
 
 | Run | Memory/skill reuse | Purpose |
 |---|---|---|
 | A: treatment | enabled after each passed task | measure compounding |
 | B: control | disabled or frozen from task 1 | estimate effector-only improvement |
 
-If budget permits only one run, Run A may decide whether to proceed, but the
-decision must state that the control was not run and confidence is lower.
+The **treatment-minus-control delta** is the primary evidence that *craft* — not
+caching, task ordering, or effector drift — drove any improvement. A single-arm
+run (A only) may yield only a **provisional, explicitly lower-confidence**
+decision, recorded as such; it cannot be a full pass.
 
 ## Model And Pricing Pins
 
@@ -78,11 +81,17 @@ Per task:
 
 Aggregate:
 
-- slope of total cost after warm-up;
+- slope of total cost after warm-up (with confidence interval, per the
+  pre-registered statistical test);
 - slope of effector retries after warm-up;
 - first-pass contract success trend;
 - reuse trend;
-- treatment vs control delta if control run exists.
+- treatment-minus-control delta (required; the control run is mandatory).
+
+`total_cost_usd` includes all task-attributable spend (model + effector). The
+standing production viability gate additionally amortizes off-duty overhead
+(dream, eval, regression guard, maintenance) into cost-per-task — see ADR-0015;
+Phase −1 has no dream job, so that overhead is not yet present here.
 
 ## Warm-Up And Exclusions
 
@@ -93,11 +102,30 @@ Aggregate:
   with a reason.
 - Do not exclude high-cost tasks merely because they look anomalous.
 
+## Statistical Test (pre-registered)
+
+Decide the slope with a pre-specified test, not a visual read (ADR-0017):
+
+- **Effect size:** state the minimum detectable cost-per-task slope the run is
+  powered to detect; if n (post-warm-up) cannot detect it, extend the task count
+  or report the result as underpowered.
+- **Autocorrelation:** sequential tasks are correlated; estimate the slope with a
+  method that accounts for it (e.g. OLS of cost on position with a lagged-residual
+  correction, or a pre-registered nonparametric trend test such as Mann–Kendall).
+- **Uncertainty:** report the slope point estimate with a confidence interval.
+- **Attribution:** report the treatment-minus-control delta and its interval; a
+  bend in A that is matched in B is environment, not craft.
+
+A "pass" on cost requires the slope CI to exclude zero in the improving direction
+and the treatment-vs-control delta to favor treatment.
+
 ## Pass Criteria
 
 All must hold:
 
-1. Cost slope after warm-up is negative and not explained by task difficulty,
+1. Cost slope after warm-up is negative by the pre-registered statistical test
+   (slope CI excludes zero in the improving direction), the treatment-vs-control
+   delta favors treatment, and the result is not explained by task difficulty,
    pricing, cache, or provider changes.
 2. Quality holds or improves: contract pass rate non-decreasing, DoD pass rate
    non-decreasing, retries trending down or first-pass success trending up.

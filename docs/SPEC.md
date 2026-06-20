@@ -36,6 +36,12 @@ Guiding rule: **the LLM is a fixed CPU; all durable, growing competence lives in
 - **Instruction-source boundary.** Instructions come only from the operator and task specs. Web/file/tool content is data, not commands.
 - **Everything is traced, with cost attached.** Every action, tool/model/store call emits a structured event under a task trace.
 - **The economics must close.** Track cost-per-completed-task continuously; if it isn't falling while quality holds, the system is not working.
+- **Cost is total, not task-time-only.** The viability metric is total system spend per completed task over a window — including off-duty dream, eval, regression-guard, and maintenance overhead — so a bending task-time curve cannot hide rising overhead. (ADR-0015.)
+- **Verification must be independent of authorship.** "Done" is decided by acceptance tests and gates, but the spec and those acceptance tests are themselves reviewed by a different source class before they are trusted; a self-authored test is not self-evidence. (ADR-0014.)
+- **Durable learning requires execution-grounded evidence.** A memory or skill that changes behavior, routing, tool choice, or review is promoted only on an objective signal (a test that ran, a tool result) — never on self-reported success, and never on a second instance of the same model. Recovery from bad learning (unlearning) is a first-class operation. (ADR-0012.)
+- **Craft is scoped to the model it was proven against.** Portable craft carries the model/effector versions it was validated against; a model or effector change re-validates the craft library and quarantines what regresses, because a workaround for one model is a liability on the next. (ADR-0013.)
+- **Passing tests is not yet safe.** Effector-written product code passes static security and dependency scanning before "done"; functional correctness is necessary, not sufficient. (ADR-0010.)
+- **Oversight must scale.** Human review is risk-weighted and fractional, fails closed when saturated, and is structured against automation bias; a fixed-count human check silently vanishes as volume grows. (ADR-0016.)
 
 ---
 
@@ -136,7 +142,7 @@ The architecture is justified by one claim: **competence compounds, so the Nth t
 **Protocol:** run ~30 real tasks in sequence; each completed task may write a tested orchestration-craft skill (or utility) the next can reuse. Log per task: tokens and cost (including the effector's), wall-clock, pass/fail at the gate, effector retries, and prior-craft reuse count.
 
 **Pass criteria (all three):**
-1. **Cost-per-task trends down** across the 30 tasks (negative slope after warm-up) — including the effector's spend.
+1. **Cost-per-task trends down** across the 30 tasks — a negative slope after warm-up whose confidence interval excludes zero by the pre-registered statistical test, which a **mandatory memory-disabled control run** attributes to craft rather than caching, ordering, or effector drift (the treatment-minus-control delta favors treatment), and which includes the effector's spend. (ADR-0017.)
 2. **Quality holds or improves** (gate pass rate non-decreasing; effector retries per task trending down).
 3. **Reuse is real** (later tasks measurably retrieve and reuse earlier orchestration craft — better specs, fewer effector round-trips — not just regenerate from scratch).
 
@@ -197,9 +203,10 @@ stateDiagram-v2
 ```
 
 - **Budget ledger + hard cost ceiling.** A daily/weekly spend ceiling halts the system regardless of progress. Real money is the real-world "energy."
-- **Cost-per-task viability gate.** Standing rule: if cost-per-completed-task isn't trending down (while quality holds) by week N, halt and escalate. The production version of the Phase −1 test, running forever.
+- **Cost-per-task viability gate.** Standing rule: if cost-per-completed-task isn't trending down (while quality holds) by week N, halt and escalate. The production version of the Phase −1 test, running forever. Cost-per-task is **total system spend ÷ completed tasks over a window**, amortizing off-duty overhead (dream, eval, regression guard, maintenance) — not task-time tokens alone — with an **overhead ratio** tracked beside it (ADR-0015). The compounding-slope gate applies only to **repeated within-domain** task streams; heterogeneous one-off work (e.g. the Phase 1 self-build backlog) is bounded by absolute budget caps and milestones instead, not by a slope it cannot exhibit.
 - **Milestone gating + revenue faucet.** Verified milestones or real revenue unlock more budget.
-- **Human approval queue (by task class).** Irreversible/paid/publishing/novel actions queue with full context. Approval is bound to the exact actor, tool, target resource, normalized parameters, expiry, and policy version; execution fails closed if approval lookup, replay protection, or audit logging fails.
+- **Human approval queue (by task class).** Irreversible/paid/publishing/novel actions queue with full context. Approval is bound to the exact actor, tool, target resource, normalized parameters, expiry, and policy version; execution fails closed if approval lookup, replay protection, or audit logging fails. A registered tool used with parameters outside a known-safe pattern, or any action whose risk class is ambiguous, **escalates to approval rather than executing** (default-deny already covers unregistered tools). (ADR-0016.)
+- **Oversight that scales.** Spot-checks of self-modifications are a **risk-weighted fraction**, not a fixed count (so the reviewed share doesn't trend to zero as volume grows); a bounded human-review rate **fails closed** on overflow; and reviewers record an independent judgment *before* seeing the agent's rationale, to resist automation bias. (ADR-0016.)
 - **Regression guard + rotating eval harness.** The single most important safety mechanism. It is **not a small fixed set**: it is rotating, partly **held-out**, **grows** every time a new failure is found (the failure becomes a regression test), includes **adversarial** cases, and is backed by **human spot-checks** on a sample of self-modification commits. Unverifiable work routes to a human judge. Every self-modification passes before commit; failures roll back.
 - **Credential & capability scoping.** Least privilege per task; revocable; never broad standing access to Apple/Vultr/Firebase/payment accounts. The model may propose tool calls, but a policy layer authorizes execution from `security/tool-policy.yaml`; authorization never depends on model confidence.
 
@@ -227,7 +234,7 @@ flowchart TD
   H -->|No| J[Commit new versioned snapshot]
 ```
 
-Success criteria: after a cycle, retrieval precision up, skill count down while coverage holds, contradiction count down. Deliberate forgetting matters — unbounded memory degrades retrieval precision. Every commit is eval-gated and versioned (git-snapshotted), so a bad consolidation is revertible. Start conservative: small, reversible changes only.
+Success criteria: after a cycle, retrieval precision up, skill count down while coverage holds, contradiction count down. Deliberate forgetting matters — unbounded memory degrades retrieval precision — but forgetting is **reversible cold-archive, never hard delete**, a **protected class** (safety/security/approval lessons) never decays, and forgetting is itself eval-gated (ADR-0012). Consolidation promotes a behavior-changing lesson only on **execution-grounded** evidence, not a self-reported success signal — this blocks memory reward-hacking and plausible-success poisoning. Each consolidated fact/skill records the episodes it `derived_from`, so a poisoned episode can be **unlearned** by tainting derivatives and rolling back to the last clean snapshot. The distillation boundary's "is this generic?" call is a model judgment, so promoted craft is **sample-audited by a human** for residual project-specificity. Every commit is eval-gated and versioned (git-snapshotted), so a bad consolidation is revertible. Start conservative: small, reversible changes only.
 
 ---
 
@@ -263,6 +270,9 @@ flowchart LR
   "tests": ["evals/spec_pattern_crud_service.eval.json"],
   "deps": [],
   "version": "2.1.0",
+  "status": "active",
+  "validated_against": { "models": ["model-x@2026-05"], "effector_version": "claude-code@1.x", "embedding_model": "embed-y@1" },
+  "last_validated": "2026-06-01T00:00:00Z",
   "first_pass_gate_rate": 0.88,
   "mean_effector_retries": 0.4,
   "uses": 23,
@@ -303,9 +313,9 @@ flowchart LR
 }
 ```
 
-**Promotion gates:** *Skill → shared:* passes tests, is general (not project-specific), not a near-duplicate, succeeded N times, `generic: true`. *Fact → shared:* corroborated by a **different source class**, project-stripped, with provenance and confidence.
+**Promotion gates:** *Skill → shared:* passes tests, is general (not project-specific), not a near-duplicate, succeeded N times, `generic: true`, and carries a `validated_against` record (model/effector/embedding) and `status: active` — a model/effector change re-validates it and quarantines regressions (ADR-0013; schema in `memory/skill-manifest.schema.json`). *Fact → shared:* corroborated by a **different source class** — **execution-grounded** (a test that ran, a tool result) for any behavior-changing fact, since a second instance of the same model is correlated, not independent — project-stripped, with provenance, `derived_from` (for unlearning), and confidence. Promoted craft is sample-audited by a human for residual project-specificity (ADR-0012).
 
-**Memory admission gate:** no raw web/file/tool/user content is written directly to durable memory. Every memory write passes `security/memory-admission-policy.md`: source trust classification, prompt-injection scan, sensitive-data scan, project-specific leakage scan, TTL/retention decision, provenance, and a reason it is useful outside the immediate context. Failing any check rejects the write or routes it to human review.
+**Memory admission gate:** no raw web/file/tool/user content is written directly to durable memory. Every memory write passes `security/memory-admission-policy.md`: source trust classification, prompt-injection scan, sensitive-data scan, project-specific leakage scan, TTL/retention decision, provenance, and a reason it is useful outside the immediate context. Failing any check rejects the write or routes it to human review. Admission scanning is **necessary but not sufficient**: experience-poisoning attacks implant *plausible successful episodes* that pass an injection scan, so a "successful experience" without execution-grounded corroboration is rejected, and unlearning (Section 7) is the recovery path for poison that looks benign at admission.
 
 ---
 
@@ -341,10 +351,12 @@ Every project the system builds — and the Journeyman itself — is constructed
 ### 11.3 The Definition-of-Done gate (CI)
 Nothing merges unless:
 - tests pass (unit + integration), coverage threshold met, build green, lint/format clean;
-- **docs-in-sync:** a change altering architecture or a public interface must update `ARCHITECTURE.md`/`DESIGN.md` or attach an ADR; CI fails on doc drift. (Enforceable rule: *architectural change requires an ADR.* Avoid unenforceable rules like "all prose must be perfect.")
+- **code security clean:** product code passes SAST + dependency (SCA) + in-code secret scanning at or above the operator-set severity, failing closed — functional tests are necessary but not sufficient for "secure" (ADR-0010, `security/code-security-policy.md`);
+- **spec & tests independently verified:** for risk/cost-gated effector tasks, the TaskSpec and its acceptance tests are reviewed by a different source class before the effector runs, and every effector task ships negative/property tests plus a spec intent restatement (ADR-0014);
+- **docs-in-sync:** a change altering architecture or a public interface must update `ARCHITECTURE.md`/`DESIGN.md` or attach an ADR; CI fails on doc drift. (Enforceable rule: *architectural change requires an ADR.* Avoid unenforceable rules like "all prose must be perfect.") This gate checks **presence**; a scheduled **brain-faithfulness audit** samples whether the docs actually match the code (ADR-0014, `evals/eval-governance.md`);
 - **code graph regenerated** so the map is never stale.
 
-This is the same regression-guard pattern as Section 6, extended from "don't break the system" to "don't let docs/tests/graph fall out of sync." The agent cannot land work that degrades the project brain.
+This is the same regression-guard pattern as Section 6, extended from "don't break the system" to "don't let docs/tests/graph/security fall out of sync." The agent cannot land work that degrades the project brain.
 
 ### 11.4 The standard project template
 One canonical template, used for every project the system builds **and** for the Journeyman's own repository:
@@ -366,8 +378,10 @@ project-template/
     unit/
     integration/
   build/                    # build system config
+  security/
+    code-security-policy.md # SAST + SCA + in-code secret scan for product code
   ci/
-    definition_of_done.yaml # the gate: tests, coverage, build, lint, docs-sync, graph-fresh
+    definition_of_done.yaml # the gate: tests, coverage, build, lint, code-security, docs-sync, graph-fresh
   hooks/                    # pre-commit/CI: regenerate code graph, run doc-sync check
 ```
 
@@ -397,7 +411,9 @@ Coding is not hand-rolled inside the kernel. The agent drives an existing agenti
 **This is a tool, not a second agent.** The relationship is senior engineer → power tool, not engineer → colleague. Framing it as a tool is what keeps the "single agent until proven otherwise" principle intact and keeps the agent↔effector seam from becoming the multi-agent coordination surface the MAST taxonomy warns about. The discipline below is precisely the mitigation for that seam.
 
 ### 11A.1 The contract: spec-in, verified-artifact-out
-The effector is invoked with a **TaskSpec plus acceptance tests**, not a chat. It operates inside the project repo (Plane A): it reads the project brain, edits code, and runs against the Definition-of-Done gate. Its result is **accepted only when the gate passes** — tests green, coverage met, build clean, docs-in-sync, code graph regenerated. The effector's own claim of "done" is treated as untrusted output, exactly like every other tool result in the system. On gate failure the agent refines the spec (or fixes the gate's findings) and re-drives; it does not relay an unverified result forward.
+The effector is invoked with a **TaskSpec plus acceptance tests**, not a chat. It operates inside the project repo (Plane A): it reads the project brain, edits code, and runs against the Definition-of-Done gate. Its result is **accepted only when the gate passes** — tests green, coverage met, build clean, security scans clean, docs-in-sync, code graph regenerated. The effector's own claim of "done" is treated as untrusted output, exactly like every other tool result in the system. On gate failure the agent refines the spec (or fixes the gate's findings) and re-drives; it does not relay an unverified result forward.
+
+**The spec and acceptance tests are themselves verified — they are the real trust anchor.** A gate that checks code against tests the agent itself wrote cannot catch a faithful implementation of a *wrong* spec, and specification + verification gaps are the two largest documented failure classes in agent systems. So for any task above an operator-set risk/cost threshold — and for anything irreversible, externally visible, or in the Phase 2 product — the TaskSpec and its acceptance tests are reviewed by a **different source class** (a different model family or a human) *before* the effector runs; every effector task must include negative/property tests (not happy-path only) and a short **intent restatement** checked against the original goal; and the instance that authors the tests is never the instance that reviews them (ADR-0014).
 
 ```mermaid
 flowchart LR
@@ -454,7 +470,7 @@ flowchart TD
   L --> A
 ```
 
-The model decides **one step at a time**; the kernel (never the model) moves money, runs code, writes durable stores, and enforces the Definition-of-Done gate. Coding follows the capability-escalation ladder: a trivial mechanical edit is done directly or with a cheap model; substantial work is delegated to the coding effector under the contract in Section 11A, whose output is untrusted until the gate passes.
+The model decides **one step at a time**; the kernel (never the model) moves money, runs code, writes durable stores, and enforces the Definition-of-Done gate (including code-security scanning and, for gated tasks, independent spec/test verification before the effector runs). Coding follows the capability-escalation ladder: a trivial mechanical edit is done directly or with a cheap model; substantial work is delegated to the coding effector under the contract in Section 11A, whose output is untrusted until the gate passes.
 
 ---
 
@@ -466,7 +482,7 @@ Do not build this in the seed. Multi-agent LLM systems frequently fail on coordi
 
 ## 14. Observability layer (seed)
 
-Structured, append-only events with **trace IDs per task** (spans for every tool/model/store call). Log **decision provenance** — what was retrieved and why an action was chosen. Attach cost to every span; roll up per task/agent/skill/model and compute the **cost-per-task curve** continuously. **The coding effector is instrumented at its boundary** (Section 11A.2): every session emits an `effector_session` span carrying its token/dollar cost, transcript reference, internal retry count, and the git diff of its changes — so the black box does not blind the cost curve. Keep enough to **replay** a decision offline. Pipe events to a columnar store (DuckDB/ClickHouse); dashboards are built in Phase 1.
+Structured, append-only events with **trace IDs per task** (spans for every tool/model/store call). Log **decision provenance** — what was retrieved and why an action was chosen. Attach cost to every span, tagged with a **cost category** (`task_time` vs amortized `overhead` — dream/eval/guard/maintenance — vs `runtime_ops`); roll up per task/agent/skill/model and compute the **total-cost-per-task curve** with its overhead ratio continuously (ADR-0015). **The coding effector is instrumented at its boundary** (Section 11A.2): every session emits an `effector_session` span carrying its token/dollar cost, transcript reference, internal retry count, and the git diff of its changes — so the black box does not blind the cost curve. Keep enough to **re-inspect a decision offline** — its inputs, retrieval set, and provenance; note that non-deterministic models and deprecation mean this reconstructs *why* a decision was made, not a bit-exact reproduction of the model's output. Pipe events to a columnar store (DuckDB/ClickHouse); dashboards are built in Phase 1.
 
 `Event`:
 ```json
@@ -485,8 +501,9 @@ Structured, append-only events with **trace IDs per task** (spans for every tool
 
 - **Money/contracts/publishing/credentials/kernel changes/novel actions** → human approval queue, by task class, always.
 - **Web/tool/file content is data, not instructions** (prompt-injection defense). External content enters through `security/untrusted-content-pipeline.md`: quarantine, sanitization, source labeling, optional summarization by a low-privilege reader, and action screening against the original task before any tool call.
-- **Least-privilege, revocable credentials** per task; no broad standing access. Tool execution is authorized by `security/tool-policy.yaml`, not by the model.
-- **Memory writes are gated.** Durable memory accepts only validated, source-labeled, project-stripped, retention-scoped records under `security/memory-admission-policy.md`.
+- **Least-privilege, revocable credentials** per task; no broad standing access. Tool execution is authorized by `security/tool-policy.yaml`, not by the model — `default-deny` for unregistered tools, and **escalate-to-approval** for a registered tool used with parameters outside a known-safe pattern or an ambiguous risk class (ADR-0016).
+- **Production operations are governed separately from build-time** (Phase 2). A live product needs prod credentials and egress the build-time sandbox forbids, so `security/runtime-ops-policy.md` governs run-time: reversible ops (canary deploy, scale, rollback) run autonomously within blast-radius limits with automated rollback; irreversible/high-impact ops (migrations, deletes, payments, billing, DNS, credential mutation) stay human-gated; an operator kill switch is always live (ADR-0011).
+- **Memory writes are gated.** Durable memory accepts only validated, source-labeled, project-stripped, retention-scoped records under `security/memory-admission-policy.md`. Behavior-changing memories require **execution-grounded** corroboration, "plausible successful experiences" without it are rejected (experience-poisoning defense), and poisoned memories are recoverable by **unlearning** (ADR-0012).
 - **Approvals are exact and expiring.** High-impact execution requires a valid `security/approval-record.schema.json` record bound to normalized parameters.
 - **Regression guard + Definition-of-Done before every commit**; rollback on failure.
 - **Kernel, dream job, and regression guard are seed-owned**, not self-written; the system may *propose* changes to them, not apply them.
@@ -496,7 +513,7 @@ Structured, append-only events with **trace IDs per task** (spans for every tool
 ## 16. Concurrency, schemas, and implementation realities
 
 - **Concurrency on shared stores.** The dream job writes while work reads; define a locking / versioned-snapshot / merge policy. The code graph uses a git union-merge driver so concurrent commits don't conflict.
-- **`capability_score` is measured, not declared.** Derive model capability scores from the eval harness; re-measure on model updates.
+- **`capability_score` is measured, not declared.** Derive model capability scores from the eval harness; re-measure on model updates. A model/effector/embedding update also **re-validates the craft library**: each affected skill re-runs its eval and regressions are quarantined, because capability scores gate *routing* while craft re-validation gates *retrieval of the craft itself* (ADR-0013).
 - **Schema migration.** Version every store schema; keep a migration path; snapshot before migrations.
 - **Confidence is unreliable.** Gate on task class and objective signals (tests passed, tool agreement), not self-reported confidence.
 - **Schemas are executable contracts.** Task results, trace events, approval records, and Phase -1 metrics are validated against JSON Schema before persistence or CI acceptance.
@@ -516,10 +533,10 @@ flowchart LR
   P2 -.milestone gated.-> s2[deploy then users then revenue then more budget]
 ```
 
-**Phase −1 — Validate.** Section 4. Gate: the cost curve bends.
+**Phase −1 — Validate.** Section 4. Gate: the cost curve bends — by the pre-registered statistical test, with the **mandatory** memory-disabled control run attributing the bend to craft (ADR-0017).
 **Phase 0 — Seed.** Build Sections 5–16 minimally, single-agent, **inside a repo scaffolded from the standard template** so the Journeyman is built under its own discipline. Stop when the system can take a task, load a project brain, retrieve, route, **drive the coding effector under the spec-in/verified-out contract**, run sandboxed code, write & test a generic skill, write agent memory, scaffold a project, pass the Definition-of-Done gate, dream conservatively, pass the regression guard, emit traces (including the effector boundary), and ask for approval.
 **Phase 1 — Dogfood.** Feed the self-build backlog (Section 19), each a TaskSpec with acceptance tests. Only non-critical components are self-built.
-**Phase 2 — Product.** One web product; budget unlocks on verified milestones and real revenue.
+**Phase 2 — Product.** One web product; budget unlocks on verified milestones and real revenue. Before this phase runs, `security/runtime-ops-policy.md` must be in force: production runs in a separate environment with scoped, revocable credentials; reversible ops are autonomous within blast-radius limits behind a canary with automated rollback; irreversible ops are human-gated; an operator kill switch is always available (ADR-0011).
 
 ---
 
@@ -572,7 +589,7 @@ Multi-agent and agent graph memory are not on this list — they are earned late
 - **Sandbox:** container or microVM, no ambient credentials.
 - **Model router:** thin abstraction over provider SDKs; one `select()` + `call()`; capability scores measured from the harness.
 - **Observability:** structured JSON events → DuckDB/ClickHouse → dashboards (Phase 1); OpenTelemetry-style spans.
-- **CI / Definition-of-Done:** standard CI runner driving `ci/definition_of_done.yaml`.
+- **CI / Definition-of-Done:** standard CI runner driving `ci/definition_of_done.yaml`, including **SAST + dependency/SCA scanning** of product code behind a stable interface (tool configured in `security/code-security-policy.md`).
 - **Orchestration:** plain async task queue + worker loop. No heavy agent framework in the kernel.
 
 ---
@@ -585,14 +602,14 @@ Two repositories, both scaffolded from the same template:
 ```
 /CLAUDE.md /ARCHITECTURE.md /DESIGN.md /docs /codegraph /tests /build /ci /hooks   (from the template)
 /kernel        runtime, model_router, tool_registry, sandbox, event_bus   (protected)
-/memory        episodic, semantic(vector), summaries, skills, gates        (agent graph deferred)
+/memory        episodic, semantic(vector), summaries, skills (skill-manifest.schema.json), gates   (agent graph deferred)
 /governance    budget_ledger, cost_gate, approval_queue, eval_harness, cred_scope, regression_guard
 /dream         consolidation + distillation + skill-library maintenance     (conservative)
 /cognition     retrieval, reflection                                        (curriculum deferred)
 /coordination  DEFERRED - build only when earned
 /project       scaffolder, definition_of_done, code_graph_indexer, project-template/
 /tools         primitive tools + registered skill-tools + coding_effector adapter (spec-in/verified-out, instrumented)
-/security      tool policy, approval policy, memory admission, untrusted-content pipeline, data classification
+/security      tool policy, approval policy, memory admission, untrusted-content pipeline, data classification, code-security policy, runtime-ops policy
 /observability dashboards (P1), trace queries
 /evals         rotating regression harness + held-out sets + red-team suites
 /experiments   Phase -1 validation harness and results
@@ -624,6 +641,14 @@ Two repositories, both scaffolded from the same template:
 - **Approval prompts can be manipulated or replayed.** → high-impact approvals are parameter-bound, expiring, policy-versioned, and replay-protected.
 - **Trace logs can become a sensitive-data store.** → trace schema, redaction policy, retention policy, encryption, and access controls are part of the seed gate.
 - **Eval harnesses can be weakened by the same change they are meant to judge.** → eval governance requires protected held-out sets and human review for changes to evals, policies, prompts, memory gates, retrieval config, or tool scopes.
+- **Effector-written code passes tests yet ships vulnerabilities** (~45% CWE-class in recent studies). → a code-security DoD gate (SAST + SCA + in-code secret scan), fail-closed (ADR-0010).
+- **The spec/acceptance-tests can misencode intent** (specification + verification are the two largest agent-failure classes). → independent, risk/cost-gated review of spec and tests by a different source class before the effector runs; the test author never reviews their own tests (ADR-0014).
+- **Memory misevolves or is experience-poisoned** (reward-hacked or plausible-success episodes that pass admission scans). → execution-grounded corroboration for behavior-changing memory, provenance + unlearning, protected-class forgetting, plausible-success red-team cases (ADR-0012).
+- **Portable craft goes stale or anti-correlated after a model/effector change.** → craft is `validated_against` a model/effector; an upgrade re-validates the library and quarantines regressions (ADR-0013).
+- **Amortized overhead hides in the cost curve** (dreaming, evals, guard, maintenance). → cost-per-task is total system spend over a window with an overhead ratio; the compounding gate is scoped to repeated within-domain work (ADR-0015).
+- **Human oversight doesn't scale and invites automation bias** (rubber-stamping as volume grows). → risk-weighted fractional sampling, a bounded review rate that fails closed, and pre-commitment before seeing the agent's answer (ADR-0016).
+- **Phase 2 production has no build-time sandbox** (live credentials, egress, continuous ops). → a separate runtime-ops governance surface: scoped revocable prod credentials, reversible-autonomous vs human-gated action classes, canary + automated rollback, blast-radius limits, kill switch (ADR-0011).
+- **Phase −1 can be underpowered or mis-attributed** (n≈30, autocorrelated, single domain). → mandatory control arm + pre-registered effect size, autocorrelation-aware test, and confidence interval; single-domain external validity stated as a residual (ADR-0017).
 
 ---
 
@@ -642,6 +667,13 @@ Two repositories, both scaffolded from the same template:
 - The **tool policy** risk matrix and which operations require parameter-bound approval.
 - The **data classification** and retention rules for traces, transcripts, diffs, memory, and eval evidence.
 - The **Phase -1 baseline/control** and exact statistical pass/fail thresholds.
+- The **code-security severity** that blocks merge and the dependency-audit policy (`security/code-security-policy.md`).
+- The **risk/cost threshold** above which a spec and its acceptance tests get independent review, and which task classes always require it.
+- The **oversight sampling weights and human-review-rate ceiling** (and the fail-closed overflow behavior).
+- The **blast-radius limits** for autonomous Phase 2 operations and the action classes always human-gated (`security/runtime-ops-policy.md`).
+- The **Phase −1 effect size** (minimum detectable slope) and statistical-test parameters, and confirmation the control run is funded.
+- The **cost-per-task window** and acceptable overhead ratio for the standing viability gate.
+- The **craft re-validation policy** on a model/effector change (what counts as "material," batching, quarantine thresholds).
 
 ---
 
@@ -669,6 +701,9 @@ These artifacts are not optional supporting docs. They are part of the seed cont
 - `observability/retention-policy.md` — retention windows, access controls, deletion, and replay limits.
 - `tools/coding-effector-contract.md` — TaskSpec input, verified-artifact output, retry/cost/diff evidence, and acceptance criteria.
 - `tools/coding-effector-sandbox.yaml` — filesystem, shell, network, credential, and artifact limits for effector sessions.
+- `security/code-security-policy.md` — SAST + dependency (SCA) + in-code secret scanning of product code: severities, suppressions, fail-closed (ADR-0010).
+- `security/runtime-ops-policy.md` — Phase 2 run-time governance: credential custody, reversible-vs-human-gated action classes, blast-radius limits, canary/rollback, kill switch (ADR-0011).
+- `memory/skill-manifest.schema.json` — executable skill/craft manifest, including `validated_against` and `status` for model-version scoping (ADR-0013).
 - `ci/definition_of_done.yaml` — CI gate that references these artifacts and blocks merges when policies, evals, traces, or effector evidence are missing.
 
 ### 24.2 CI gates
@@ -681,8 +716,12 @@ The Definition-of-Done gate blocks merge if any of these are true:
 - eval, policy, approval, or credential-scope files change without human review;
 - traces, transcripts, or diffs contain unredacted restricted data or secret-like values;
 - effector sessions lack cost, transcript reference, retry count, sandbox profile, and diff reference;
+- product code has an unresolved SAST or dependency-audit finding at or above the configured severity, or a scanner failed to run (fail-closed);
+- a risk/cost-gated effector task lacks an independent spec/test verification span, or an effector task ships without negative/property tests;
+- a behavior-changing memory or skill is promoted without execution-grounded corroboration;
+- a model/effector/embedding change lands without craft re-validation (regressed skills not quarantined);
 - Phase -1 results do not validate against `experiments/phase_minus_1/results.schema.json`;
-- Phase -1 claims a pass without matching the pre-registered protocol.
+- Phase -1 claims a pass without the mandatory control run or the pre-registered statistical test.
 
 ### 24.3 Runtime gates
 
@@ -694,10 +733,11 @@ The kernel, not the model, enforces:
 - approval binding before high-impact actions;
 - trace redaction before persistence;
 - cost, retry, recursion, and wall-clock limits for every task;
+- runtime-ops authorization (Phase 2): production actions authorized by `security/runtime-ops-policy.md`, within blast-radius limits, with rollback armed, never on un-screened untrusted content;
 - fail-closed behavior when policy lookup, schema validation, audit logging, or approval verification fails.
 
 ---
 
 ## 25. The success metric that matters
 
-Watch one curve above all: **cost (tokens + wall-clock) and quality of the Nth task in a domain.** If task #20 is cheaper and better than task #1 because it reused generic skills and craft, the architecture is compounding and you have something genuinely new. The two-plane separation is what makes that compounding *portable* — the agent gets better at building systems in general, not just better at the one system it happens to be building. Phase −1 and the standing cost-per-task gate exist precisely so you learn whether this is real early and cheaply, instead of after building the whole thing.
+Watch one curve above all: **total cost (tokens + wall-clock, including amortized dream/eval/guard/maintenance overhead) and quality of the Nth task in a domain.** If task #20 is cheaper and better than task #1 because it reused generic skills and craft — and a control run confirms it was the craft, not caching — the architecture is compounding and you have something genuinely new. The two-plane separation is what makes that compounding *portable* — the agent gets better at building systems in general, not just better at the one system it happens to be building. Phase −1 and the standing cost-per-task gate exist precisely so you learn whether this is real early and cheaply, instead of after building the whole thing.

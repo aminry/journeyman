@@ -18,6 +18,8 @@ thresholds:
   coverage_min_percent: 80      # minimum line/branch coverage to merge
   max_lint_warnings: 0          # lint warnings tolerated (0 = treat warnings as errors)
   max_changed_files_without_adr: 50  # safety net: very large diffs always warrant an ADR
+  max_high_severity_security_events: 0  # SAST/SCA findings at/above block_severity tolerated
+  code_security_block_severity: high    # min SAST/SCA severity that blocks merge (ADR-0010)
 
 # ----------------------------------------------------------------------------
 # Behavior
@@ -101,6 +103,19 @@ gates:
     description: No credentials, tokens, or secrets committed.
     command: "{{SECRET_SCAN_CMD}}"
     required: true
+
+  - id: code-security
+    type: code_security
+    description: >
+      Product code passes SAST + dependency (SCA) + in-code secret scanning before
+      merge. Functional tests are necessary but not sufficient for "secure" (ADR-0010).
+    required: true
+    fail_closed: true
+    policy: "security/code-security-policy.md"      # scaffolded into product repos
+    sast_command: "{{SAST_CMD}}"
+    sca_command: "{{SCA_CMD}}"
+    block_severity: ${thresholds.code_security_block_severity}
+    max_high_severity_findings: ${thresholds.max_high_severity_security_events}
 
   # --------------------------------------------------------------------------
   # Journeyman-only gate. Enabled in the Journeyman's OWN repository, where a change

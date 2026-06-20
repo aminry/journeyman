@@ -19,7 +19,7 @@
 
 ## 3. Definition of Done
 
-A change is **done only when the Definition-of-Done gate passes** (`ci/definition_of_done.yaml`, run via `hooks/run_dod.sh`) — never on assertion. It requires: unit + integration tests pass; coverage ≥ threshold; build green; lint clean; **docs in sync** (§4); **code graph regenerated and committed**; and — for this Journeyman repo — the **regression guard** (the eval harness) passes for any self-modification.
+A change is **done only when the Definition-of-Done gate passes** (`ci/definition_of_done.yaml`, run via `hooks/run_dod.sh`) — never on assertion. It requires: unit + integration tests pass; coverage ≥ threshold; build green; lint clean; **code security clean** (SAST + dependency/SCA + in-code secret scan, fail-closed); **spec & acceptance tests independently verified** by a different source class for risk/cost-gated effector tasks; **docs in sync** (§4); **code graph regenerated and committed**; and — for this Journeyman repo — the **regression guard** (the eval harness) passes for any self-modification.
 
 If invoked with a TaskSpec, deliver against its acceptance tests, run the gate, and do not report success until it passes.
 

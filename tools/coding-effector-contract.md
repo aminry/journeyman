@@ -21,6 +21,21 @@ Every effector session receives:
 
 The input must be structured. Free-form chat is not a valid effector contract.
 
+## Spec & Test Verification (before the effector runs)
+
+The TaskSpec and its acceptance tests are the trust anchor — a gate that checks
+code against tests the agent wrote cannot catch a faithful build of a *wrong*
+spec. Therefore, before a session starts:
+
+- the TaskSpec carries a short **intent restatement** checked against the original
+  goal;
+- acceptance tests include **negative/property** cases, not happy-path only;
+- for tasks above the operator-set risk/cost threshold — and anything
+  irreversible, externally visible, or in the Phase 2 product — the spec and tests
+  are **reviewed by a different source class** (a different model family or a
+  human), recorded as a `verification` span; the instance that authored the tests
+  does not review them (ADR-0014).
+
 ## Output Contract
 
 The effector must return:

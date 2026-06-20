@@ -26,6 +26,8 @@ rules, retrieval sources, model providers, or effector capabilities change.
 | Approval to execution | execution policy | approval prompt text | parameter-bound approval record |
 | Trace writer to storage | redaction policy | raw transcripts, diffs, tool output | redaction, encryption, retention |
 | Self-modification to mainline | regression guard | modified memory, skills, prompts, evals | held-out evals and human review |
+| Effector output to release | code-security + DoD gate | effector-written product code | SAST + SCA + secret scan, spec/test independent verification |
+| Agent to production runtime (Phase 2) | runtime-ops policy layer | model-proposed operational action | scoped credentials, blast-radius limits, canary + rollback, human gate for irreversible ops |
 
 ## Attacker Profiles
 
@@ -53,6 +55,12 @@ rules, retrieval sources, model providers, or effector capabilities change.
 | Eval weakening | unsafe self-modification passes | eval governance, protected held-out sets, human review | eval evidence bundle |
 | Effector overreach | coding effector changes outside task scope | sandbox profile, diff review, DoD gate | effector session span |
 | Denial of wallet | runaway loop drains budget | cost ceilings, retry limits, recursion limits | budget ledger trace |
+| Insecure product code shipped | functional-but-vulnerable code passes tests | SAST + SCA + in-code secret scan, fail-closed | code-security gate span |
+| Spec/test misencodes intent | confidently-wrong "verified" output | independent spec/test review by a different source class; negative/property tests | verification span |
+| Memory misevolution / experience poisoning | reward-hacked or plausible-success episode drives behavior | execution-grounded corroboration, provenance + unlearning, plausible-success red-team | memory write span |
+| Craft staleness after model change | a model-specific workaround becomes anti-craft | `validated_against` + re-validation + quarantine | craft-revalidation evidence |
+| Oversight saturation / automation bias | rubber-stamped self-modifications at volume | risk-weighted fractional sampling, fail-closed overflow, pre-commitment | approval/review span |
+| Runtime-ops overreach (Phase 2) | unsafe or irreversible production action | blast-radius limits, human-gated irreversible classes, canary + rollback, kill switch | runtime_ops span |
 
 ## Residual Risks
 
@@ -64,6 +72,15 @@ rules, retrieval sources, model providers, or effector capabilities change.
   providers and credential formats change.
 - The coding effector remains a high-capability subsystem. It must run with no
   ambient credentials and a bounded sandbox.
+- Static scanners (SAST/SCA) miss logic flaws and novel vulnerability classes; the
+  code-security gate is defense in depth, not proof of secure code.
+- Independent spec/test review reduces but does not eliminate intent
+  misunderstanding; a reviewer can share the author's blind spot.
+- Memory unlearning in the seed is coarse (snapshot rollback); it loses good
+  learning since the last clean checkpoint until the deferred provenance graph is
+  earned.
+- Phase 2 runtime-ops controls assume correct reversible-vs-irreversible
+  classification; ambiguous actions must default to human-gated.
 
 ## Review Triggers
 
@@ -73,4 +90,6 @@ Review this file when:
 - a model provider, memory backend, or coding effector changes;
 - an eval, prompt, retrieval, or memory policy changes;
 - a security incident, injection attempt, approval failure, or trace leak occurs;
-- Phase -1 or regression-guard thresholds change.
+- Phase -1 or regression-guard thresholds change;
+- the code-security policy, runtime-ops policy, or spec/test verification threshold changes;
+- the system enters Phase 2 (production runtime) or adds production credentials.

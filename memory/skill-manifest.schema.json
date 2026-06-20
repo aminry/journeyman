@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://journeyman.local/schemas/skill-manifest.json",
+  "title": "Journeyman Skill Manifest",
+  "description": "Executable contract for a Plane B craft artifact (orchestration playbook or utility code). See SPEC §8 and ADR-0013.",
+  "type": "object",
+  "required": [
+    "id",
+    "kind",
+    "summary",
+    "when_to_use",
+    "tests",
+    "version",
+    "scope",
+    "generic",
+    "status",
+    "validated_against",
+    "last_validated"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "id": { "type": "string" },
+    "kind": { "enum": ["orchestration", "code"] },
+    "signature": { "type": "string" },
+    "summary": { "type": "string" },
+    "when_to_use": { "type": "string" },
+    "tests": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1
+    },
+    "deps": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "version": {
+      "type": "string",
+      "description": "Semantic version of the skill itself.",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "scope": { "enum": ["local", "shared"] },
+    "generic": {
+      "type": "boolean",
+      "description": "True only after passing the distillation boundary (project-stripped)."
+    },
+    "status": {
+      "enum": ["active", "quarantined", "deprecated"],
+      "description": "quarantined: validated_against no longer matches the active model/effector; not retrieved until re-validated (ADR-0013)."
+    },
+    "validated_against": {
+      "type": "object",
+      "description": "The model/effector/embedding versions this craft was last proven against (ADR-0013).",
+      "required": ["models", "effector_version"],
+      "additionalProperties": false,
+      "properties": {
+        "models": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1
+        },
+        "effector_version": { "type": "string" },
+        "embedding_model": { "type": "string" }
+      }
+    },
+    "last_validated": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "provenance": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Trace/tool/source ids establishing how this skill was created and corroborated."
+    },
+    "derived_from": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Episode/source ids this skill consolidated from, for unlearning/taint (ADR-0012)."
+    },
+    "corroboration": {
+      "type": "string",
+      "enum": ["execution_grounded", "tool_result", "different_model_family", "human", "none"],
+      "description": "How a behavior-changing skill was corroborated; behavior-changing craft requires an execution-grounded or tool/human signal (ADR-0012)."
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "first_pass_gate_rate": { "type": "number", "minimum": 0, "maximum": 1 },
+        "mean_effector_retries": { "type": "number", "minimum": 0 },
+        "success_rate": { "type": "number", "minimum": 0, "maximum": 1 },
+        "uses": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}
