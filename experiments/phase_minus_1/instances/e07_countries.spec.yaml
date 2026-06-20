@@ -1,0 +1,26 @@
+# Phase −1 instance spec — E7 countries (EASY tier)
+# Scalars only; required/type/length (exact length via min_len==max_len); create/get/list/delete.
+
+id: countries
+title: Countries service
+tier: easy
+
+resource:
+  name: country
+  path: /countries
+  fields:
+    - { name: id,       type: uuid,   generated: true, readonly: true }
+    - { name: name,     type: string, required: true, min_len: 1, max_len: 100 }
+    - { name: iso_code, type: string, required: true, min_len: 2, max_len: 2 }
+
+endpoints:
+  create: { method: POST,   path: /countries,      success: 201 }
+  get:    { method: GET,    path: "/countries/{id}", success: 200, missing: 404 }
+  list:   { method: GET,    path: /countries,      success: 200 }
+  delete: { method: DELETE, path: "/countries/{id}", success: 204, missing: 404 }
+
+rules:
+  on_validation_error: 422
+  on_unique_conflict: 409
+
+business_rules: []

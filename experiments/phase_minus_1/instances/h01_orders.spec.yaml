@@ -1,0 +1,56 @@
+# Phase −1 instance spec — H1 orders (HARD tier)
+# Medium features + business rules: state_machine(status) + cross_field(discount ≤ total).
+# pagination + multiple filters + multi-sort. Drives the effector AND the held-out suite.
+# (manifest H1: pending→paid→shipped→delivered; cancel only before shipped; invalid → 409.)
+
+id: orders
+title: Orders service
+tier: hard
+
+resource:
+  name: order
+  path: /orders
+  fields:
+    - { name: id,             type: uuid,     generated: true, readonly: true }
+    - { name: created_at,     type: datetime, generated: true, readonly: true }
+    - { name: reference,      type: string,   required: true, unique: true, pattern: '^[0-9]{8}$' }
+    - { name: status,         type: enum,     default: pending, values: [pending, paid, shipped, delivered, cancelled] }
+    - { name: currency,       type: enum,     required: true, values: [usd, eur, gbp] }
+    - { name: total_cents,    type: integer,  required: true, min: 0 }
+    - { name: discount_cents, type: integer,  required: true, min: 0 }
+    - { name: quantity,       type: integer,  required: true, min: 1, max: 1000 }
+    - { name: expedited,      type: boolean,  default: false }
+
+endpoints:
+  create: { method: POST,   path: /orders,        success: 201 }
+  get:    { method: GET,    path: "/orders/{id}", success: 200, missing: 404 }
+  list:
+    method: GET
+    path: /orders
+    success: 200
+    pagination: { limit_param: limit, offset_param: offset, default_limit: 20, max_limit: 100 }
+    filters: [currency, expedited]
+    sort: [total_cents, quantity]
+  update: { method: PATCH,  path: "/orders/{id}", success: 200, missing: 404, partial: true }
+  delete: { method: DELETE, path: "/orders/{id}", success: 204, missing: 404 }
+
+rules:
+  on_validation_error: 422
+  on_unique_conflict: 409
+  timestamps_immutable: true
+
+business_rules:
+  - kind: state_machine
+    field: status
+    initial: pending
+    transitions:
+      pending: [paid, cancelled]
+      paid: [shipped, cancelled]
+      shipped: [delivered]
+      delivered: []
+      cancelled: []
+    on_illegal: 409
+  - kind: cross_field
+    fields: [discount_cents, total_cents]
+    op: lte
+    message: discount_cents must not exceed total_cents

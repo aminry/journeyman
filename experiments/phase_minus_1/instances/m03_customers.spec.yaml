@@ -1,0 +1,38 @@
+# Phase −1 instance spec — M3 customers (MEDIUM tier)
+# Full CRUD incl. partial PATCH; unique email (→409); enum + datetime + bool-default;
+# list with pagination + filter + sort.
+
+id: customers
+title: Customers service
+tier: medium
+
+resource:
+  name: customer
+  path: /customers
+  fields:
+    - { name: id,         type: uuid,     generated: true, readonly: true }
+    - { name: created_at, type: datetime, generated: true, readonly: true }
+    - { name: name,       type: string,   required: true, min_len: 1, max_len: 120 }
+    - { name: email,      type: string,   required: true, unique: true, pattern: '^[^@]+@[^@]+\.[^@]+$' }
+    - { name: tier,       type: enum,     required: true, values: [free, pro, enterprise] }
+    - { name: active,     type: boolean,  default: true }
+
+endpoints:
+  create: { method: POST,   path: /customers,      success: 201 }
+  get:    { method: GET,    path: "/customers/{id}", success: 200, missing: 404 }
+  list:
+    method: GET
+    path: /customers
+    success: 200
+    pagination: { limit_param: limit, offset_param: offset, default_limit: 20, max_limit: 100 }
+    filters: [tier]
+    sort: [created_at]
+  update: { method: PATCH,  path: "/customers/{id}", success: 200, missing: 404, partial: true }
+  delete: { method: DELETE, path: "/customers/{id}", success: 204, missing: 404 }
+
+rules:
+  on_validation_error: 422
+  on_unique_conflict: 409
+  timestamps_immutable: true
+
+business_rules: []

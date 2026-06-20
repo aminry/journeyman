@@ -1,0 +1,39 @@
+# Phase −1 instance spec — M9 tickets (MEDIUM tier)
+# Full CRUD incl. partial PATCH; unique reference (→409); enum + datetime + bool-default;
+# list with pagination + two filters + sort.
+
+id: tickets
+title: Support tickets service
+tier: medium
+
+resource:
+  name: ticket
+  path: /tickets
+  fields:
+    - { name: id,         type: uuid,     generated: true, readonly: true }
+    - { name: created_at, type: datetime, generated: true, readonly: true }
+    - { name: subject,    type: string,   required: true, min_len: 1, max_len: 200 }
+    - { name: reference,  type: string,   required: true, unique: true, pattern: '^[0-9]{8}$' }
+    - { name: priority,   type: enum,     required: true, values: [low, normal, high, urgent] }
+    - { name: status,     type: enum,     required: true, values: [open, pending, closed] }
+    - { name: resolved,   type: boolean,  default: false }
+
+endpoints:
+  create: { method: POST,   path: /tickets,      success: 201 }
+  get:    { method: GET,    path: "/tickets/{id}", success: 200, missing: 404 }
+  list:
+    method: GET
+    path: /tickets
+    success: 200
+    pagination: { limit_param: limit, offset_param: offset, default_limit: 20, max_limit: 100 }
+    filters: [priority, status]
+    sort: [created_at]
+  update: { method: PATCH,  path: "/tickets/{id}", success: 200, missing: 404, partial: true }
+  delete: { method: DELETE, path: "/tickets/{id}", success: 204, missing: 404 }
+
+rules:
+  on_validation_error: 422
+  on_unique_conflict: 409
+  timestamps_immutable: true
+
+business_rules: []

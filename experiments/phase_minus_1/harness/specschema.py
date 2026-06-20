@@ -123,6 +123,65 @@ class ResourceSpec:
         return [f for f in self.fields if f.unique]
 
 
+# --------------------------------------------------------------------------- #
+# Business rules (hard tier — domain.md §2/§3). Stored raw on InstanceSpec for
+# serialization; parsed into typed objects by business_rules_of() for the compiler.
+# --------------------------------------------------------------------------- #
+@dataclass(frozen=True)
+class StateMachineRule:
+    """A status field with allowed transitions; illegal transition -> on_illegal."""
+
+    field: str
+    initial: str
+    transitions: dict[str, list[str]]
+    on_illegal: int = 409
+    locked_after: tuple[str, ...] = ()  # states after which the entity is immutable
+
+    @property
+    def states(self) -> list[str]:
+        return list(self.transitions.keys())
+
+
+@dataclass(frozen=True)
+class CrossFieldRule:
+    """A constraint relating two fields, e.g. end_at > start_at. Violation -> 422."""
+
+    fields: tuple[str, str]  # (a, b); the rule constrains a `op` b
+    op: str  # gt | gte | lt | lte
+    on_violation: int = 422
+    message: str = ""
+
+
+@dataclass(frozen=True)
+class RelationshipRule:
+    """A child resource references a parent via ``ref_field`` (a second resource)."""
+
+    parent: str  # referenced resource name
+    child: str  # resource holding the ref field
+    ref_field: str
+    on_missing_parent: int = 422  # creating a child with a non-existent parent
+    on_parent_delete: str = "restrict"  # restrict (-> on_unique_conflict) | cascade
+
+
+@dataclass(frozen=True)
+class CompositeUniqueRule:
+    """A tuple of fields unique together; duplicate -> on_conflict."""
+
+    fields: tuple[str, ...]
+    on_conflict: int = 409
+
+
+BusinessRule = StateMachineRule | CrossFieldRule | RelationshipRule | CompositeUniqueRule
+
+
+@dataclass(frozen=True)
+class RelatedResource:
+    """An optional second resource (parent or child) for relationship rules."""
+
+    resource: ResourceSpec
+    endpoints: EndpointSet
+
+
 @dataclass(frozen=True)
 class InstanceSpec:
     id: str
@@ -132,6 +191,54 @@ class InstanceSpec:
     endpoints: EndpointSet
     rules: Rules
     business_rules: list[Any] = field(default_factory=list)
+    related: RelatedResource | None = None
+
+
+def parse_business_rule(raw: dict) -> BusinessRule:
+    """Parse one raw ``business_rules`` entry into a typed rule (domain.md §2)."""
+    if not isinstance(raw, dict):
+        raise SpecError(f"business rule must be a mapping, got {type(raw).__name__}")
+    kind = _require(raw, "kind", "business_rule")
+    if kind == "state_machine":
+        transitions = _require(raw, "transitions", "business_rule.state_machine")
+        return StateMachineRule(
+            field=_require(raw, "field", "business_rule.state_machine"),
+            initial=_require(raw, "initial", "business_rule.state_machine"),
+            transitions={k: list(v) for k, v in transitions.items()},
+            on_illegal=int(raw.get("on_illegal", 409)),
+            locked_after=tuple(raw.get("locked_after", []) or []),
+        )
+    if kind == "cross_field":
+        fields = _require(raw, "fields", "business_rule.cross_field")
+        if len(fields) != 2:
+            raise SpecError("business_rule.cross_field requires exactly two fields")
+        return CrossFieldRule(
+            fields=(fields[0], fields[1]),
+            op=_require(raw, "op", "business_rule.cross_field"),
+            on_violation=int(raw.get("on_violation", 422)),
+            message=str(raw.get("message", "")),
+        )
+    if kind == "relationship":
+        return RelationshipRule(
+            parent=_require(raw, "parent", "business_rule.relationship"),
+            child=_require(raw, "child", "business_rule.relationship"),
+            ref_field=_require(raw, "ref_field", "business_rule.relationship"),
+            on_missing_parent=int(raw.get("on_missing_parent", 422)),
+            on_parent_delete=str(raw.get("on_parent_delete", "restrict")),
+        )
+    if kind == "composite_unique":
+        fields = _require(raw, "fields", "business_rule.composite_unique")
+        if len(fields) < 2:
+            raise SpecError("business_rule.composite_unique requires at least two fields")
+        return CompositeUniqueRule(
+            fields=tuple(fields), on_conflict=int(raw.get("on_conflict", 409))
+        )
+    raise SpecError(f"unknown business rule kind '{kind}'")
+
+
+def business_rules_of(spec: InstanceSpec) -> list[BusinessRule]:
+    """Typed view of ``spec.business_rules`` (the raw list stays for serialization)."""
+    return [parse_business_rule(r) for r in spec.business_rules]
 
 
 def _require(d: dict, key: str, where: str) -> Any:
@@ -187,31 +294,34 @@ def _parse_endpoint(kind: str, raw: dict) -> Endpoint:
     )
 
 
-def parse_spec(data: dict) -> InstanceSpec:
-    """Build an :class:`InstanceSpec` from a parsed YAML mapping."""
-    if not isinstance(data, dict):
-        raise SpecError("spec root must be a mapping")
-
-    res_raw = _require(data, "resource", "spec")
-    fields_raw = _require(res_raw, "fields", "resource")
+def _parse_resource(res_raw: dict, where: str) -> ResourceSpec:
+    fields_raw = _require(res_raw, "fields", where)
     if not fields_raw:
-        raise SpecError("resource.fields must be non-empty")
-    fields = [_parse_field(f, "resource.fields") for f in fields_raw]
-
-    resource = ResourceSpec(
-        name=_require(res_raw, "name", "resource"),
-        path=_require(res_raw, "path", "resource"),
-        fields=fields,
+        raise SpecError(f"{where}.fields must be non-empty")
+    return ResourceSpec(
+        name=_require(res_raw, "name", where),
+        path=_require(res_raw, "path", where),
+        fields=[_parse_field(f, f"{where}.fields") for f in fields_raw],
     )
 
-    eps_raw = _require(data, "endpoints", "spec")
-    endpoints = EndpointSet(
+
+def _parse_endpoints(eps_raw: dict) -> EndpointSet:
+    return EndpointSet(
         **{
             kind: _parse_endpoint(kind, eps_raw[kind])
             for kind in eps_raw
             if kind in EndpointSet.__annotations__
         }
     )
+
+
+def parse_spec(data: dict) -> InstanceSpec:
+    """Build an :class:`InstanceSpec` from a parsed YAML mapping."""
+    if not isinstance(data, dict):
+        raise SpecError("spec root must be a mapping")
+
+    resource = _parse_resource(_require(data, "resource", "spec"), "resource")
+    endpoints = _parse_endpoints(_require(data, "endpoints", "spec"))
 
     rules_raw = data.get("rules") or {}
     rules = Rules(
@@ -220,7 +330,16 @@ def parse_spec(data: dict) -> InstanceSpec:
         timestamps_immutable=bool(rules_raw.get("timestamps_immutable", False)),
     )
 
-    return InstanceSpec(
+    related = None
+    if data.get("related"):
+        rel_raw = data["related"]
+        related = RelatedResource(
+            resource=_parse_resource(rel_raw, "related"),
+            endpoints=_parse_endpoints(_require(rel_raw, "endpoints", "related")),
+        )
+
+    # Validate business rules eagerly so a malformed rule fails loudly at load time.
+    spec = InstanceSpec(
         id=_require(data, "id", "spec"),
         title=data.get("title", data["id"]),
         tier=_require(data, "tier", "spec"),
@@ -228,7 +347,10 @@ def parse_spec(data: dict) -> InstanceSpec:
         endpoints=endpoints,
         rules=rules,
         business_rules=list(data.get("business_rules") or []),
+        related=related,
     )
+    business_rules_of(spec)  # raises SpecError on a malformed rule
+    return spec
 
 
 def load_spec(path: str | Path) -> InstanceSpec:

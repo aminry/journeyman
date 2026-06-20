@@ -1,0 +1,40 @@
+# Phase −1 instance spec — M10 venues (MEDIUM tier)
+# Full CRUD incl. partial PATCH; unique slug (→409); enum + datetime + bool-default;
+# list with pagination + two filters (one enum, one string) + sort.
+
+id: venues
+title: Venues service
+tier: medium
+
+resource:
+  name: venue
+  path: /venues
+  fields:
+    - { name: id,         type: uuid,     generated: true, readonly: true }
+    - { name: created_at, type: datetime, generated: true, readonly: true }
+    - { name: name,       type: string,   required: true, min_len: 1, max_len: 160 }
+    - { name: slug,       type: string,   required: true, unique: true, pattern: '^[a-z0-9-]+$' }
+    - { name: kind,       type: enum,     required: true, values: [theater, stadium, club, hall] }
+    - { name: city,       type: string,   required: true, min_len: 1, max_len: 80 }
+    - { name: capacity,   type: integer,  required: true, min: 0, max: 200000 }
+    - { name: accessible, type: boolean,  default: true }
+
+endpoints:
+  create: { method: POST,   path: /venues,      success: 201 }
+  get:    { method: GET,    path: "/venues/{id}", success: 200, missing: 404 }
+  list:
+    method: GET
+    path: /venues
+    success: 200
+    pagination: { limit_param: limit, offset_param: offset, default_limit: 20, max_limit: 100 }
+    filters: [kind, city]
+    sort: [capacity]
+  update: { method: PATCH,  path: "/venues/{id}", success: 200, missing: 404, partial: true }
+  delete: { method: DELETE, path: "/venues/{id}", success: 204, missing: 404 }
+
+rules:
+  on_validation_error: 422
+  on_unique_conflict: 409
+  timestamps_immutable: true
+
+business_rules: []

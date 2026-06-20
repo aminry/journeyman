@@ -1,0 +1,72 @@
+# Phase −1 instance spec — H10 invoices (HARD tier)
+# Business rules: state_machine(draft→sent→paid, IMMUTABLE once paid) +
+# relationship(line_item → invoice, restrict). Second resource `line_item`.
+# pagination + multiple filters + multi-sort.
+# (manifest H10 also describes computed total = Σ line items — deferred; ADR-0021.)
+
+id: invoices
+title: Invoices service
+tier: hard
+
+resource:
+  name: invoice
+  path: /invoices
+  fields:
+    - { name: id,           type: uuid,     generated: true, readonly: true }
+    - { name: created_at,   type: datetime, generated: true, readonly: true }
+    - { name: number,       type: string,   required: true, unique: true, pattern: '^[0-9]{8}$' }
+    - { name: status,       type: enum,     default: draft, values: [draft, sent, paid] }
+    - { name: customer,     type: string,   required: true, min_len: 1, max_len: 120 }
+    - { name: amount_cents, type: integer,  required: true, min: 0 }
+    - { name: currency,     type: enum,     required: true, values: [usd, eur, gbp] }
+    - { name: overdue,      type: boolean,  default: false }
+    - { name: issued_at,    type: datetime, required: true }
+
+endpoints:
+  create: { method: POST,   path: /invoices,        success: 201 }
+  get:    { method: GET,    path: "/invoices/{id}", success: 200, missing: 404 }
+  list:
+    method: GET
+    path: /invoices
+    success: 200
+    pagination: { limit_param: limit, offset_param: offset, default_limit: 20, max_limit: 100 }
+    filters: [currency, overdue]
+    sort: [amount_cents, issued_at]
+  update: { method: PATCH,  path: "/invoices/{id}", success: 200, missing: 404, partial: true }
+  delete: { method: DELETE, path: "/invoices/{id}", success: 204, missing: 404 }
+
+related:
+  name: line_item
+  path: /line_items
+  fields:
+    - { name: id,           type: uuid,    generated: true, readonly: true }
+    - { name: invoice_id,   type: ref,     required: true, ref: invoice }
+    - { name: description,  type: string,  required: true, min_len: 1, max_len: 200 }
+    - { name: amount_cents, type: integer, required: true, min: 0 }
+    - { name: quantity,     type: integer, required: true, min: 1, max: 1000 }
+  endpoints:
+    create: { method: POST,   path: /line_items,        success: 201 }
+    get:    { method: GET,    path: "/line_items/{id}", success: 200, missing: 404 }
+    delete: { method: DELETE, path: "/line_items/{id}", success: 204, missing: 404 }
+
+rules:
+  on_validation_error: 422
+  on_unique_conflict: 409
+  timestamps_immutable: true
+
+business_rules:
+  - kind: state_machine
+    field: status
+    initial: draft
+    transitions:
+      draft: [sent]
+      sent: [paid]
+      paid: []
+    locked_after: [paid]
+    on_illegal: 409
+  - kind: relationship
+    parent: invoice
+    child: line_item
+    ref_field: invoice_id
+    on_missing_parent: 422
+    on_parent_delete: restrict

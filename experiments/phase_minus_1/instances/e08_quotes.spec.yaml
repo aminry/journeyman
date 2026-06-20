@@ -1,0 +1,26 @@
+# Phase −1 instance spec — E8 quotes (EASY tier)
+# Scalars only; required/type/length validation; create/get/list/delete.
+
+id: quotes
+title: Quotes service
+tier: easy
+
+resource:
+  name: quote
+  path: /quotes
+  fields:
+    - { name: id,     type: uuid,   generated: true, readonly: true }
+    - { name: text,   type: string, required: true, min_len: 1, max_len: 1000 }
+    - { name: author, type: string, required: true, min_len: 1, max_len: 120 }
+
+endpoints:
+  create: { method: POST,   path: /quotes,      success: 201 }
+  get:    { method: GET,    path: "/quotes/{id}", success: 200, missing: 404 }
+  list:   { method: GET,    path: /quotes,      success: 200 }
+  delete: { method: DELETE, path: "/quotes/{id}", success: 204, missing: 404 }
+
+rules:
+  on_validation_error: 422
+  on_unique_conflict: 409
+
+business_rules: []

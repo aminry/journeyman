@@ -1,0 +1,38 @@
+# Phase −1 instance spec — M4 events (MEDIUM tier)
+# Full CRUD incl. partial PATCH; unique slug (→409); enum + (client) datetime + bool-default;
+# list with pagination + filter + sort (by a client-set datetime → strong ordering test).
+
+id: events
+title: Events service
+tier: medium
+
+resource:
+  name: event
+  path: /events
+  fields:
+    - { name: id,          type: uuid,     generated: true, readonly: true }
+    - { name: name,        type: string,   required: true, min_len: 1, max_len: 160 }
+    - { name: slug,        type: string,   required: true, unique: true, pattern: '^[a-z0-9-]+$' }
+    - { name: status,      type: enum,     required: true, values: [draft, published, cancelled] }
+    - { name: starts_at,   type: datetime, required: true }
+    - { name: capacity,    type: integer,  required: true, min: 0, max: 100000 }
+    - { name: is_featured, type: boolean,  default: false }
+
+endpoints:
+  create: { method: POST,   path: /events,      success: 201 }
+  get:    { method: GET,    path: "/events/{id}", success: 200, missing: 404 }
+  list:
+    method: GET
+    path: /events
+    success: 200
+    pagination: { limit_param: limit, offset_param: offset, default_limit: 20, max_limit: 100 }
+    filters: [status]
+    sort: [starts_at]
+  update: { method: PATCH,  path: "/events/{id}", success: 200, missing: 404, partial: true }
+  delete: { method: DELETE, path: "/events/{id}", success: 204, missing: 404 }
+
+rules:
+  on_validation_error: 422
+  on_unique_conflict: 409
+
+business_rules: []

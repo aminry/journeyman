@@ -112,12 +112,14 @@ def valid_value(field: Field, seed: int = 0) -> Any:
     return token
 
 
+def valid_payload_for_resource(resource, seed: int = 0) -> dict[str, Any]:
+    """A constraint-satisfying create payload for any resource (writable fields)."""
+    return {f.name: valid_value(f, seed) for f in resource.writable_fields()}
+
+
 def valid_payload(spec: InstanceSpec, seed: int = 0) -> dict[str, Any]:
     """A complete, constraint-satisfying create payload (writable fields only)."""
-    payload: dict[str, Any] = {}
-    for f in spec.resource.writable_fields():
-        payload[f.name] = valid_value(f, seed)
-    return payload
+    return valid_payload_for_resource(spec.resource, seed)
 
 
 def boundary_cases(field: Field) -> list[BoundaryCase]:

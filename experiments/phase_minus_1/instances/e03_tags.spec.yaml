@@ -1,0 +1,26 @@
+# Phase −1 instance spec — E3 tags (EASY tier)
+# Scalars only; required/type/pattern/length validation; create/get/list/delete.
+
+id: tags
+title: Tags service
+tier: easy
+
+resource:
+  name: tag
+  path: /tags
+  fields:
+    - { name: id,    type: uuid,   generated: true, readonly: true }
+    - { name: name,  type: string, required: true, min_len: 1, max_len: 60 }
+    - { name: color, type: string, required: true, pattern: '^#[0-9a-fA-F]{6}$' }
+
+endpoints:
+  create: { method: POST,   path: /tags,      success: 201 }
+  get:    { method: GET,    path: "/tags/{id}", success: 200, missing: 404 }
+  list:   { method: GET,    path: /tags,      success: 200 }
+  delete: { method: DELETE, path: "/tags/{id}", success: 204, missing: 404 }
+
+rules:
+  on_validation_error: 422
+  on_unique_conflict: 409
+
+business_rules: []

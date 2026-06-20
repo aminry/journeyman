@@ -25,6 +25,8 @@ from harness.reference.service import (
     BUG_IGNORE_DEFAULT,
     BUG_IGNORE_FILTER,
     BUG_IGNORE_MAX_LIMIT,
+    BUG_IGNORE_SECONDARY_FILTER,
+    BUG_IGNORE_SECONDARY_SORT,
     BUG_NO_404,
     BUG_SKIP_CONSTRAINTS,
     BUG_SKIP_REQUIRED,
@@ -118,6 +120,8 @@ def test_suite_catches_a_bug_in_every_dimension(spec_obj, spec_dict) -> None:
             | _ids(spec_obj, lambda c: c.id.startswith("update:readonly:"))
         ),
         BUG_IGNORE_FILTER: _ids(spec_obj, lambda c: c.id.startswith("list:filter:")),
+        BUG_IGNORE_SECONDARY_FILTER: {"list:filter:multi"},
+        BUG_IGNORE_SECONDARY_SORT: {"list:sort:multi"},
         BUG_SKIP_UNIQUE: _ids(spec_obj, lambda c: c.category == "unique"),
         BUG_IGNORE_DEFAULT: _ids(spec_obj, lambda c: c.category == "default"),
         BUG_NO_404: {"get:missing", "update:missing", "delete:missing", "delete:ok"},

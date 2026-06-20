@@ -20,7 +20,11 @@ from harness.runconfig import default_run_config
 from harness.runner import run_instance
 
 REPO = Path(__file__).resolve().parents[2]
-BOOKS = REPO / "experiments" / "phase_minus_1" / "instances" / "example_books.spec.yaml"
+INSTANCES = REPO / "experiments" / "phase_minus_1" / "instances"
+BOOKS = INSTANCES / "example_books.spec.yaml"
+RESERVATIONS = (
+    INSTANCES / "h02_reservations.spec.yaml"
+)  # hard: cross_field + relationship (2 resources)
 
 
 @pytest.fixture(scope="module")
@@ -105,6 +109,43 @@ def test_trace_has_effector_session_span(run_result) -> None:
 def test_first_pass_contract_success(run_result) -> None:
     assert run_result.record["first_pass_contract_success"] is True
     assert run_result.record["effector_retries"] == 0
+
+
+def test_hard_relationship_spec_end_to_end(tmp_path_factory) -> None:
+    """A hard spec (cross_field + relationship + a second `related` resource) runs the
+    whole pipeline green: the spec.json the fake effector receives carries the
+    business_rules + related resource, the booted reference service implements both
+    resources, and the contract suite (relationship/cross_field cases create the
+    parent rows over HTTP) passes — proving specs drive the effector for the hard tier."""
+    workdir = tmp_path_factory.mktemp("spine_hard")
+    cfg = default_run_config()
+    craft_lib = CraftLibrary(workdir / "craft")
+    seed_default_craft(craft_lib)
+    result = run_instance(
+        RESERVATIONS,
+        config=cfg,
+        effector=FakeEffector(cfg, artifact_dir=workdir / "eff_artifacts"),
+        workdir=workdir,
+        craft_lib=craft_lib,
+        run_id="spine_reservations",
+        position=2,
+    )
+    failures = [(cid, d) for cid, ok, d in result.suite_result.results if not ok]
+    assert result.suite_result.all_passed, f"contract failures: {failures}"
+    assert result.record["contract_passed"] is True
+    assert result.record["dod_passed"] is True
+    # the relationship + cross_field cases were actually compiled and exercised
+    case_ids = {cid for cid, _, _ in result.suite_result.results}
+    assert any(c.startswith("relationship:") for c in case_ids)
+    assert any(c.startswith("cross_field:") for c in case_ids)
+    # held-out integrity: the effector repo has the spec but not the contract suite
+    repo = result.repo_dir
+    assert (repo / "spec.json").exists()
+    for path in repo.rglob("*.py"):
+        if ".git" in path.parts:
+            continue
+        text = path.read_text(errors="ignore")
+        assert "compile_contract_suite" not in text and "import harness" not in text
 
 
 def test_runs_with_relative_workdir(tmp_path, monkeypatch) -> None:

@@ -1,0 +1,27 @@
+# Phase −1 instance spec — E1 notes (EASY tier)
+# Scalars only; required/type/length validation; create/get/list(no pagination)/delete.
+# Drives the effector AND generates the held-out contract suite (../domain.md §2/§3/§4).
+
+id: notes
+title: Notes service
+tier: easy
+
+resource:
+  name: note
+  path: /notes
+  fields:
+    - { name: id,    type: uuid,   generated: true, readonly: true }
+    - { name: title, type: string, required: true, min_len: 1, max_len: 200 }
+    - { name: body,  type: string, required: true, min_len: 1, max_len: 5000 }
+
+endpoints:
+  create: { method: POST,   path: /notes,        success: 201 }
+  get:    { method: GET,    path: "/notes/{id}",   success: 200, missing: 404 }
+  list:   { method: GET,    path: /notes,        success: 200 }
+  delete: { method: DELETE, path: "/notes/{id}",   success: 204, missing: 404 }
+
+rules:
+  on_validation_error: 422   # body: { errors: [ { field, message } ] }
+  on_unique_conflict: 409
+
+business_rules: []

@@ -1,0 +1,26 @@
+# Phase −1 instance spec — E4 todos (EASY tier)
+# Scalars only; required/type/length + a boolean with a default; create/get/list/delete.
+
+id: todos
+title: Todos service
+tier: easy
+
+resource:
+  name: todo
+  path: /todos
+  fields:
+    - { name: id,   type: uuid,    generated: true, readonly: true }
+    - { name: text, type: string,  required: true, min_len: 1, max_len: 500 }
+    - { name: done, type: boolean, default: false }
+
+endpoints:
+  create: { method: POST,   path: /todos,      success: 201 }
+  get:    { method: GET,    path: "/todos/{id}", success: 200, missing: 404 }
+  list:   { method: GET,    path: /todos,      success: 200 }
+  delete: { method: DELETE, path: "/todos/{id}", success: 204, missing: 404 }
+
+rules:
+  on_validation_error: 422
+  on_unique_conflict: 409
+
+business_rules: []

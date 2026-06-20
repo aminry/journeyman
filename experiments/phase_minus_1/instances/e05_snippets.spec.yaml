@@ -1,0 +1,26 @@
+# Phase −1 instance spec — E5 snippets (EASY tier)
+# Scalars only; required/type/length validation (large max_len); create/get/list/delete.
+
+id: snippets
+title: Code snippets service
+tier: easy
+
+resource:
+  name: snippet
+  path: /snippets
+  fields:
+    - { name: id,       type: uuid,   generated: true, readonly: true }
+    - { name: language, type: string, required: true, min_len: 1, max_len: 40 }
+    - { name: code,     type: string, required: true, min_len: 1, max_len: 10000 }
+
+endpoints:
+  create: { method: POST,   path: /snippets,      success: 201 }
+  get:    { method: GET,    path: "/snippets/{id}", success: 200, missing: 404 }
+  list:   { method: GET,    path: /snippets,      success: 200 }
+  delete: { method: DELETE, path: "/snippets/{id}", success: 204, missing: 404 }
+
+rules:
+  on_validation_error: 422
+  on_unique_conflict: 409
+
+business_rules: []

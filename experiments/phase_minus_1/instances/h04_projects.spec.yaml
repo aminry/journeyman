@@ -1,0 +1,60 @@
+# Phase −1 instance spec — H4 projects (HARD tier)
+# Business rule: relationship(task → project) with RESTRICT on delete (deleting a
+# project that still has tasks → 409). Second resource `task`.
+# pagination + multiple filters + multi-sort.
+
+id: projects
+title: Projects service
+tier: hard
+
+resource:
+  name: project
+  path: /projects
+  fields:
+    - { name: id,         type: uuid,     generated: true, readonly: true }
+    - { name: created_at, type: datetime, generated: true, readonly: true }
+    - { name: code,       type: string,   required: true, unique: true, pattern: '^[0-9]{8}$' }
+    - { name: name,       type: string,   required: true, min_len: 1, max_len: 120 }
+    - { name: status,     type: enum,     required: true, values: [active, archived, on_hold] }
+    - { name: priority,   type: integer,  required: true, min: 1, max: 5 }
+    - { name: public,     type: boolean,  default: false }
+    - { name: due_at,     type: datetime, required: true }
+
+endpoints:
+  create: { method: POST,   path: /projects,        success: 201 }
+  get:    { method: GET,    path: "/projects/{id}", success: 200, missing: 404 }
+  list:
+    method: GET
+    path: /projects
+    success: 200
+    pagination: { limit_param: limit, offset_param: offset, default_limit: 20, max_limit: 100 }
+    filters: [status, public]
+    sort: [priority, due_at]
+  update: { method: PATCH,  path: "/projects/{id}", success: 200, missing: 404, partial: true }
+  delete: { method: DELETE, path: "/projects/{id}", success: 204, missing: 404 }
+
+related:
+  name: task
+  path: /tasks
+  fields:
+    - { name: id,         type: uuid,   generated: true, readonly: true }
+    - { name: project_id, type: ref,    required: true, ref: project }
+    - { name: title,      type: string, required: true, min_len: 1, max_len: 120 }
+    - { name: done,       type: boolean, default: false }
+  endpoints:
+    create: { method: POST,   path: /tasks,        success: 201 }
+    get:    { method: GET,    path: "/tasks/{id}", success: 200, missing: 404 }
+    delete: { method: DELETE, path: "/tasks/{id}", success: 204, missing: 404 }
+
+rules:
+  on_validation_error: 422
+  on_unique_conflict: 409
+  timestamps_immutable: true
+
+business_rules:
+  - kind: relationship
+    parent: project
+    child: task
+    ref_field: project_id
+    on_missing_parent: 422
+    on_parent_delete: restrict

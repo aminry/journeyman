@@ -1,0 +1,65 @@
+# Phase −1 instance spec — H9 appointments (HARD tier)
+# Business rules: cross_field(end_at > start_at) + relationship(appointment → provider,
+# restrict). Second resource `provider`. pagination + multiple filters + multi-sort.
+# (manifest H9 also describes same-provider overlap detection — deferred; ADR-0021.)
+
+id: appointments
+title: Appointments service
+tier: hard
+
+resource:
+  name: appointment
+  path: /appointments
+  fields:
+    - { name: id,           type: uuid,     generated: true, readonly: true }
+    - { name: created_at,   type: datetime, generated: true, readonly: true }
+    - { name: reference,    type: string,   required: true, unique: true, pattern: '^[0-9]{8}$' }
+    - { name: provider_id,  type: ref,      required: true, ref: provider }
+    - { name: patient,      type: string,   required: true, min_len: 1, max_len: 120 }
+    - { name: start_at,     type: datetime, required: true }
+    - { name: end_at,       type: datetime, required: true }
+    - { name: status,       type: enum,     required: true, values: [scheduled, completed, cancelled, no_show] }
+    - { name: duration_min, type: integer,  required: true, min: 0, max: 480 }
+    - { name: reminded,     type: boolean,  default: false }
+
+endpoints:
+  create: { method: POST,   path: /appointments,        success: 201 }
+  get:    { method: GET,    path: "/appointments/{id}", success: 200, missing: 404 }
+  list:
+    method: GET
+    path: /appointments
+    success: 200
+    pagination: { limit_param: limit, offset_param: offset, default_limit: 20, max_limit: 100 }
+    filters: [status, reminded]
+    sort: [duration_min, start_at]
+  update: { method: PATCH,  path: "/appointments/{id}", success: 200, missing: 404, partial: true }
+  delete: { method: DELETE, path: "/appointments/{id}", success: 204, missing: 404 }
+
+related:
+  name: provider
+  path: /providers
+  fields:
+    - { name: id,        type: uuid,   generated: true, readonly: true }
+    - { name: name,      type: string, required: true, min_len: 1, max_len: 120 }
+    - { name: specialty, type: enum,   required: true, values: [general, dental, optical] }
+  endpoints:
+    create: { method: POST,   path: /providers,        success: 201 }
+    get:    { method: GET,    path: "/providers/{id}", success: 200, missing: 404 }
+    delete: { method: DELETE, path: "/providers/{id}", success: 204, missing: 404 }
+
+rules:
+  on_validation_error: 422
+  on_unique_conflict: 409
+  timestamps_immutable: true
+
+business_rules:
+  - kind: cross_field
+    fields: [end_at, start_at]
+    op: gt
+    message: end_at must be after start_at
+  - kind: relationship
+    parent: provider
+    child: appointment
+    ref_field: provider_id
+    on_missing_parent: 422
+    on_parent_delete: restrict

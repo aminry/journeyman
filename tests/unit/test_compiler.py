@@ -11,8 +11,8 @@ from pathlib import Path
 
 import pytest
 
-from harness.compiler import compile_contract_suite
-from harness.specschema import load_spec
+from harness.compiler import compile_contract_suite, cross_field_pair
+from harness.specschema import Field, load_spec
 
 REPO = Path(__file__).resolve().parents[2]
 BOOKS = REPO / "experiments" / "phase_minus_1" / "instances" / "example_books.spec.yaml"
@@ -117,6 +117,9 @@ def test_list_pagination_filter_sort_cases(suite) -> None:
     assert "list:sort:published_year:asc" in s
     assert "list:sort:published_year:desc" in s
     assert "list:sort:price_cents:asc" in s
+    # books has 2 filters + 2 sorts -> conjunction + composite tie-break cases (T-1.2 (b))
+    assert "list:filter:multi" in s
+    assert "list:sort:multi" in s
 
 
 def test_case_ids_are_unique(suite) -> None:
@@ -127,3 +130,17 @@ def test_case_ids_are_unique(suite) -> None:
 def test_every_case_is_runnable(suite) -> None:
     for c in suite:
         assert callable(c.run)
+
+
+def test_cross_field_pair_respects_min_and_max() -> None:
+    # capped integer fields (a declared max): satisfy/violate values must stay in range
+    # AND actually satisfy / violate the relation (the _hi_lo hardening from review).
+    a = Field(name="discount", type="integer", required=True, min=0, max=100)
+    b = Field(name="total", type="integer", required=True, min=0, max=100)
+    for op, ok in (("lte", lambda x, y: x <= y), ("gt", lambda x, y: x > y)):
+        va, vb = cross_field_pair(a, b, op, satisfy=True)
+        assert 0 <= va <= 100 and 0 <= vb <= 100
+        assert ok(va, vb), f"{op} satisfy: {va} vs {vb}"
+        va, vb = cross_field_pair(a, b, op, satisfy=False)
+        assert 0 <= va <= 100 and 0 <= vb <= 100
+        assert not ok(va, vb), f"{op} violate: {va} vs {vb}"
