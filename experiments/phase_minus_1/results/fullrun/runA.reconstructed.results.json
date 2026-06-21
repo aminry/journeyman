@@ -1,0 +1,975 @@
+{
+  "protocol_version": "v3",
+  "run_id": "runA",
+  "run_kind": "experiment",
+  "started_at": "2026-06-20T17:40:00Z",
+  "completed_at": "2026-06-21T06:05:00Z",
+  "pins": {
+    "model_ids": [
+      "claude-opus-4-8",
+      "claude-haiku-4-5",
+      "claude-sonnet-4-6"
+    ],
+    "effector_version": "claude-code-cli (headless -p, --output-format json)",
+    "pricing_snapshot": "claude-api reference, cached 2026-05-26",
+    "cache_policy": "effector default (ephemeral prompt cache); harness makes no model calls in the spine",
+    "retrieval_config": "vector retrieval (BAAI/bge-small-en-v1.5, normalized, cosine top-k=13 = full library; bge query-prefix on the query only); keyword/tag fallback (ADR-0020 \u00a75)",
+    "effector_model": "claude-opus-4-8",
+    "fallback_model": "claude-haiku-4-5",
+    "token_prices": {
+      "claude-opus-4-8": {
+        "input": 5.0,
+        "output": 25.0
+      },
+      "claude-haiku-4-5": {
+        "input": 1.0,
+        "output": 5.0
+      },
+      "claude-sonnet-4-6": {
+        "input": 3.0,
+        "output": 15.0
+      }
+    },
+    "embedding_model": "BAAI/bge-small-en-v1.5",
+    "effector_allowed_tools": [
+      "Read",
+      "Write",
+      "Edit",
+      "Bash"
+    ],
+    "permission_mode": "acceptEdits",
+    "budget_cap_usd": 10.0,
+    "sandbox_profile": "coding-effector-default",
+    "network_policy": "deny-by-default; allowlist PyPI + Anthropic API for the real run (experiment-only)",
+    "driver": {
+      "model": "claude-sonnet-4-6",
+      "fallback_model": "claude-haiku-4-5",
+      "temperature": 0.0,
+      "max_tokens": 8000
+    },
+    "embedding": {
+      "model_id": "BAAI/bge-small-en-v1.5",
+      "revision": "5c38ec7c405ec4b44b94cc5a9bb96e735b38267a",
+      "sentence_transformers_version": "5.6.0",
+      "torch_version": "2.12.1",
+      "normalize": true,
+      "similarity": "cosine",
+      "k": 13,
+      "query_prefix": "Represent this sentence for searching relevant passages:"
+    }
+  },
+  "tasks": [
+    {
+      "position": 1,
+      "task_id": "notes",
+      "tier": "easy",
+      "model_cost_usd": 0.026028,
+      "effector_cost_usd": 3.268867,
+      "total_cost_usd": 3.294895,
+      "wall_clock_seconds": 0.0,
+      "dod_passed": true,
+      "contract_passed": true,
+      "contract_tests_passed": 17,
+      "contract_tests_total": 17,
+      "effector_retries": 0,
+      "first_pass_contract_success": true,
+      "craft_items_retrieved": [],
+      "craft_items_reused": [],
+      "human_interventions": 0,
+      "security_events": [],
+      "trace_id": "tr_runA_notes"
+    },
+    {
+      "position": 2,
+      "task_id": "books",
+      "tier": "medium",
+      "model_cost_usd": 0.056247,
+      "effector_cost_usd": 3.164575,
+      "total_cost_usd": 3.220822,
+      "wall_clock_seconds": 0.0,
+      "dod_passed": true,
+      "contract_passed": false,
+      "contract_tests_passed": 53,
+      "contract_tests_total": 54,
+      "effector_retries": 0,
+      "first_pass_contract_success": false,
+      "craft_items_retrieved": [
+        "fastapi-sqlite-scaffold"
+      ],
+      "craft_items_reused": [
+        "fastapi-sqlite-scaffold"
+      ],
+      "human_interventions": 0,
+      "security_events": [],
+      "trace_id": "tr_runA_books"
+    },
+    {
+      "position": 3,
+      "task_id": "orders",
+      "tier": "hard",
+      "model_cost_usd": 0.03333,
+      "effector_cost_usd": 3.487303,
+      "total_cost_usd": 3.520633,
+      "wall_clock_seconds": 0.0,
+      "dod_passed": true,
+      "contract_passed": false,
+      "contract_tests_passed": 57,
+      "contract_tests_total": 59,
+      "effector_retries": 0,
+      "first_pass_contract_success": false,
+      "craft_items_retrieved": [
+        "fastapi-sqlite-scaffold"
+      ],
+      "craft_items_reused": [
+        "fastapi-sqlite-scaffold"
+      ],
+      "human_interventions": 0,
+      "security_events": [],
+      "trace_id": "tr_runA_orders"
+    },
+    {
+      "position": 4,
+      "task_id": "bookmarks",
+      "tier": "easy",
+      "model_cost_usd": 0.0207,
+      "effector_cost_usd": 2.145296,
+      "total_cost_usd": 2.165996,
+      "wall_clock_seconds": 0.0,
+      "dod_passed": true,
+      "contract_passed": true,
+      "contract_tests_passed": 15,
+      "contract_tests_total": 15,
+      "effector_retries": 0,
+      "first_pass_contract_success": true,
+      "craft_items_retrieved": [
+        "fastapi-sqlite-scaffold",
+        "validation-422-shape"
+      ],
+      "craft_items_reused": [
+        "fastapi-sqlite-scaffold"
+      ],
+      "human_interventions": 0,
+      "security_events": [],
+      "trace_id": "tr_runA_bookmarks"
+    },
+    {
+      "position": 5,
+      "task_id": "products",
+      "tier": "medium",
+      "model_cost_usd": 0.058962,
+      "effector_cost_usd": 3.753458,
+      "total_cost_usd": 3.81242,
+      "wall_clock_seconds": 0.0,
+      "dod_passed": true,
+      "contract_passed": false,
+      "contract_tests_passed": 38,
+      "contract_tests_total": 40,
+      "effector_retries": 0,
+      "first_pass_contract_success": false,
+      "craft_items_retrieved": [
+        "validation-422-shape",
+        "fastapi-sqlite-scaffold"
+      ],
+      "craft_items_reused": [
+        "fastapi-sqlite-scaffold",
+        "validation-422-shape"
+      ],
+      "human_interventions": 0,
+      "security_events": [],
+      "trace_id": "tr_runA_products"
+    },
+    {
+      "position": 6,
+      "task_id": "reservations",
+      "tier": "hard",
+      "model_cost_usd": 0.035367,
+      "effector_cost_usd": 3.762572,
+      "total_cost_usd": 3.797939,
+      "wall_clock_seconds": 0.0,
+      "dod_passed": true,
+      "contract_passed": false,
+      "contract_tests_passed": 56,
+      "contract_tests_total": 60,
+      "effector_retries": 0,
+      "first_pass_contract_success": false,
+      "craft_items_retrieved": [
+        "fastapi-sqlite-scaffold",
+        "validation-422-shape"
+      ],
+      "craft_items_reused": [
+        "fastapi-sqlite-scaffold",
+        "validation-422-shape"
+      ],
+      "human_interventions": 0,
+      "security_events": [],
+      "trace_id": "tr_runA_reservations"
+    },
+    {
+      "position": 7,
+      "task_id": "tags",
+      "tier": "easy",
+      "model_cost_usd": 0.024048,
+      "effector_cost_usd": 2.341195,
+      "total_cost_usd": 2.365244,
+      "wall_clock_seconds": 0.0,
+      "dod_passed": true,
+      "contract_passed": true,
+      "contract_tests_passed": 15,
+      "contract_tests_total": 15,
+      "effector_retries": 0,
+      "first_pass_contract_success": true,
+      "craft_items_retrieved": [
+        "fastapi-sqlite-scaffold",
+        "cross-field-rule-recipe",
+        "validation-422-shape"
+      ],
+      "craft_items_reused": [
+        "fastapi-sqlite-scaffold",
+        "validation-422-shape"
+      ],
+      "human_interventions": 0,
+      "security_events": [],
+      "trace_id": "tr_runA_tags"
+    },
+    {
+      "position": 8,
+      "task_id": "customers",
+      "tier": "medium",
+      "model_cost_usd": 0.023925,
+      "effector_cost_usd": 4.178292,
+      "total_cost_usd": 4.202217,
+      "wall_clock_seconds": 0.0,
+      "dod_passed": true,
+      "contract_passed": true,
+      "contract_tests_passed": 34,
+      "contract_tests_total": 34,
+      "effector_retries": 0,
+      "first_pass_contract_success": true,
+      "craft_items_retrieved": [
+        "fastapi-sqlite-scaffold",
+        "cross-field-rule-recipe",
+        "validation-422-shape"
+      ],
+      "craft_items_reused": [
+        "fastapi-sqlite-scaffold",
+        "validation-422-shape"
+      ],
+      "human_interventions": 0,
+      "security_events": [],
+      "trace_id": "tr_runA_customers"
+    },
+    {
+      "position": 9,
+      "task_id": "accounts",
+      "tier": "hard",
+      "model_cost_usd": 0.044052,
+      "effector_cost_usd": 3.542263,
+      "total_cost_usd": 3.586315,
+      "wall_clock_seconds": 0.0,
+      "dod_passed": true,
+      "contract_passed": false,
+      "contract_tests_passed": 48,
+      "contract_tests_total": 52,
+      "effector_retries": 0,
+      "first_pass_contract_success": false,
+      "craft_items_retrieved": [
+        "fastapi-sqlite-scaffold",
+        "cross-field-rule-recipe",
+        "validation-422-shape"
+      ],
+      "craft_items_reused": [
+        "fastapi-sqlite-scaffold",
+        "validation-422-shape",
+        "cross-field-rule-recipe"
+      ],
+      "human_interventions": 0,
+      "security_events": [],
+      "trace_id": "tr_runA_accounts"
+    },
+    {
+      "position": 10,
+      "task_id": "todos",
+      "tier": "easy",
+      "model_cost_usd": 0.028146,
+      "effector_cost_usd": 2.012626,
+      "total_cost_usd": 2.040772,
+      "wall_clock_seconds": 0.0,
+      "dod_passed": true,
+      "contract_passed": true,
+      "contract_tests_passed": 14,
+      "contract_tests_total": 14,
+      "effector_retries": 0,
+      "first_pass_contract_success": true,
+      "craft_items_retrieved": [
+        "fastapi-sqlite-scaffold",
+        "validation-422-shape",
+        "cross-field-rule-recipe",
+        "computed-field-recipe"
+      ],
+      "craft_items_reused": [
+        "fastapi-sqlite-scaffold",
+        "validation-422-shape"
+      ],
+      "human_interventions": 0,
+      "security_events": [],
+      "trace_id": "tr_runA_todos"
+    },
+    {
+      "position": 11,
+      "task_id": "events",
+      "tier": "medium",
+      "model_cost_usd": 0.029388,
+      "effector_cost_usd": 3.922076,
+      "total_cost_usd": 3.951464,
+      "wall_clock_seconds": 0.0,
+      "dod_passed": true,
+      "contract_passed": true,
+      "contract_tests_passed": 39,
+      "contract_tests_total": 39,
+      "effector_retries": 0,
+      "first_pass_contract_success": true,
+      "craft_items_retrieved": [
+        "fastapi-sqlite-scaffold",
+        "cross-field-rule-recipe",
+        "validation-422-shape",
+        "computed-field-recipe"
+      ],
+      "craft_items_reused": [
+        "fastapi-sqlite-scaffold",
+        "validation-422-shape"
+      ],
+      "human_interventions": 0,
+      "security_events": [],
+      "trace_id": "tr_runA_events"
+    },
+    {
+      "position": 12,
+      "task_id": "projects",
+      "tier": "hard",
+      "model_cost_usd": 0.042135,
+      "effector_cost_usd": 4.156552,
+      "total_cost_usd": 4.198687,
+      "wall_clock_seconds": 0.0,
+      "dod_passed": true,
+      "contract_passed": true,
+      "contract_tests_passed": 49,
+      "contract_tests_total": 49,
+      "effector_retries": 0,
+      "first_pass_contract_success": true,
+      "craft_items_retrieved": [
+        "fastapi-sqlite-scaffold",
+        "cross-field-rule-recipe",
+        "computed-field-recipe",
+        "validation-422-shape"
+      ],
+      "craft_items_reused": [
+        "fastapi-sqlite-scaffold",
+        "validation-422-shape"
+      ],
+      "human_interventions": 0,
+      "security_events": [],
+      "trace_id": "tr_runA_projects"
+    },
+    {
+      "position": 13,
+      "task_id": "snippets",
+      "tier": "easy",
+      "model_cost_usd": 0.029931,
+      "effector_cost_usd": 1.748012,
+      "total_cost_usd": 1.777943,
+      "wall_clock_seconds": 0.0,
+      "dod_passed": true,
+      "contract_passed": true,
+      "contract_tests_passed": 17,
+      "contract_tests_total": 17,
+      "effector_retries": 0,
+      "first_pass_contract_success": true,
+      "craft_items_retrieved": [
+        "fastapi-sqlite-scaffold",
+        "relationship-ref-recipe",
+        "computed-field-recipe",
+        "validation-422-shape",
+        "cross-field-rule-recipe"
+      ],
+      "craft_items_reused": [
+        "fastapi-sqlite-scaffold"
+      ],
+      "human_interventions": 0,
+      "security_events": [],
+      "trace_id": "tr_runA_snippets"
+    },
+    {
+      "position": 14,
+      "task_id": "articles",
+      "tier": "medium",
+      "model_cost_usd": 0.040914,
+      "effector_cost_usd": 3.008934,
+      "total_cost_usd": 3.049848,
+      "wall_clock_seconds": 0.0,
+      "dod_passed": true,
+      "contract_passed": true,
+      "contract_tests_passed": 36,
+      "contract_tests_total": 36,
+      "effector_retries": 0,
+      "first_pass_contract_success": true,
+      "craft_items_retrieved": [
+        "fastapi-sqlite-scaffold",
+        "cross-field-rule-recipe",
+        "computed-field-recipe",
+        "validation-422-shape",
+        "relationship-ref-recipe"
+      ],
+      "craft_items_reused": [
+        "fastapi-sqlite-scaffold",
+        "validation-422-shape"
+      ],
+      "human_interventions": 0,
+      "security_events": [],
+      "trace_id": "tr_runA_articles"
+    },
+    {
+      "position": 15,
+      "task_id": "playlists",
+      "tier": "hard",
+      "model_cost_usd": 0.074865,
+      "effector_cost_usd": 3.054842,
+      "total_cost_usd": 3.129707,
+      "wall_clock_seconds": 0.0,
+      "dod_passed": true,
+      "contract_passed": false,
+      "contract_tests_passed": 45,
+      "contract_tests_total": 49,
+      "effector_retries": 0,
+      "first_pass_contract_success": false,
+      "craft_items_retrieved": [
+        "cross-field-rule-recipe",
+        "fastapi-sqlite-scaffold",
+        "relationship-ref-recipe",
+        "computed-field-recipe",
+        "validation-422-shape",
+        "pagination-contract"
+      ],
+      "craft_items_reused": [
+        "fastapi-sqlite-scaffold",
+        "relationship-ref-recipe",
+        "validation-422-shape"
+      ],
+      "human_interventions": 0,
+      "security_events": [],
+      "trace_id": "tr_runA_playlists"
+    },
+    {
+      "position": 16,
+      "task_id": "measurements",
+      "tier": "easy",
+      "model_cost_usd": 0.032463,
+      "effector_cost_usd": 2.219022,
+      "total_cost_usd": 2.251485,
+      "wall_clock_seconds": 0.0,
+      "dod_passed": true,
+      "contract_passed": true,
+      "contract_tests_passed": 18,
+      "contract_tests_total": 18,
+      "effector_retries": 0,
+      "first_pass_contract_success": true,
+      "craft_items_retrieved": [
+        "fastapi-sqlite-scaffold",
+        "computed-field-recipe",
+        "cross-field-rule-recipe",
+        "relationship-ref-recipe",
+        "validation-422-shape",
+        "pagination-contract"
+      ],
+      "craft_items_reused": [
+        "fastapi-sqlite-scaffold",
+        "validation-422-shape"
+      ],
+      "human_interventions": 0,
+      "security_events": [],
+      "trace_id": "tr_runA_measurements"
+    },
+    {
+      "position": 17,
+      "task_id": "vehicles",
+      "tier": "medium",
+      "model_cost_usd": 0.063753,
+      "effector_cost_usd": 4.226357,
+      "total_cost_usd": 4.29011,
+      "wall_clock_seconds": 0.0,
+      "dod_passed": true,
+      "contract_passed": true,
+      "contract_tests_passed": 42,
+      "contract_tests_total": 42,
+      "effector_retries": 0,
+      "first_pass_contract_success": true,
+      "craft_items_retrieved": [
+        "fastapi-sqlite-scaffold",
+        "cross-field-rule-recipe",
+        "computed-field-recipe",
+        "validation-422-shape",
+        "relationship-ref-recipe",
+        "pagination-contract"
+      ],
+      "craft_items_reused": [
+        "fastapi-sqlite-scaffold",
+        "validation-422-shape"
+      ],
+      "human_interventions": 0,
+      "security_events": [],
+      "trace_id": "tr_runA_vehicles"
+    },
+    {
+      "position": 18,
+      "task_id": "coupons",
+      "tier": "hard",
+      "model_cost_usd": 0.048165,
+      "effector_cost_usd": 4.31904,
+      "total_cost_usd": 4.367205,
+      "wall_clock_seconds": 0.0,
+      "dod_passed": true,
+      "contract_passed": false,
+      "contract_tests_passed": 51,
+      "contract_tests_total": 52,
+      "effector_retries": 0,
+      "first_pass_contract_success": false,
+      "craft_items_retrieved": [
+        "cross-field-rule-recipe",
+        "sort-contract",
+        "fastapi-sqlite-scaffold",
+        "validation-422-shape",
+        "computed-field-recipe",
+        "relationship-ref-recipe",
+        "pagination-contract"
+      ],
+      "craft_items_reused": [
+        "fastapi-sqlite-scaffold",
+        "validation-422-shape",
+        "cross-field-rule-recipe"
+      ],
+      "human_interventions": 0,
+      "security_events": [],
+      "trace_id": "tr_runA_coupons"
+    },
+    {
+      "position": 19,
+      "task_id": "countries",
+      "tier": "easy",
+      "model_cost_usd": 0.033342,
+      "effector_cost_usd": 3.132393,
+      "total_cost_usd": 3.165735,
+      "wall_clock_seconds": 0.0,
+      "dod_passed": true,
+      "contract_passed": true,
+      "contract_tests_passed": 17,
+      "contract_tests_total": 17,
+      "effector_retries": 0,
+      "first_pass_contract_success": true,
+      "craft_items_retrieved": [
+        "fastapi-sqlite-scaffold",
+        "relationship-ref-recipe",
+        "cross-field-rule-recipe",
+        "validation-422-shape",
+        "sort-contract",
+        "computed-field-recipe",
+        "pagination-contract"
+      ],
+      "craft_items_reused": [
+        "fastapi-sqlite-scaffold"
+      ],
+      "human_interventions": 0,
+      "security_events": [],
+      "trace_id": "tr_runA_countries"
+    },
+    {
+      "position": 20,
+      "task_id": "recipes",
+      "tier": "medium",
+      "model_cost_usd": 0.045588,
+      "effector_cost_usd": 2.874684,
+      "total_cost_usd": 2.920272,
+      "wall_clock_seconds": 0.0,
+      "dod_passed": true,
+      "contract_passed": false,
+      "contract_tests_passed": 0,
+      "contract_tests_total": 1,
+      "effector_retries": 0,
+      "first_pass_contract_success": false,
+      "craft_items_retrieved": [
+        "fastapi-sqlite-scaffold",
+        "sort-contract",
+        "validation-422-shape",
+        "cross-field-rule-recipe",
+        "computed-field-recipe",
+        "pagination-contract",
+        "relationship-ref-recipe"
+      ],
+      "craft_items_reused": [
+        "fastapi-sqlite-scaffold",
+        "validation-422-shape"
+      ],
+      "human_interventions": 0,
+      "security_events": [],
+      "trace_id": "tr_runA_recipes"
+    },
+    {
+      "position": 21,
+      "task_id": "shipments",
+      "tier": "hard",
+      "model_cost_usd": 0.077808,
+      "effector_cost_usd": 4.27547,
+      "total_cost_usd": 4.353278,
+      "wall_clock_seconds": 0.0,
+      "dod_passed": false,
+      "contract_passed": false,
+      "contract_tests_passed": 49,
+      "contract_tests_total": 51,
+      "effector_retries": 0,
+      "first_pass_contract_success": false,
+      "craft_items_retrieved": [
+        "relationship-ref-recipe",
+        "sort-contract",
+        "cross-field-rule-recipe",
+        "validation-422-shape",
+        "computed-field-recipe",
+        "pagination-contract",
+        "fastapi-sqlite-scaffold"
+      ],
+      "craft_items_reused": [
+        "fastapi-sqlite-scaffold",
+        "relationship-ref-recipe",
+        "validation-422-shape"
+      ],
+      "human_interventions": 0,
+      "security_events": [],
+      "trace_id": "tr_runA_shipments"
+    },
+    {
+      "position": 22,
+      "task_id": "quotes",
+      "tier": "easy",
+      "model_cost_usd": 0.036411,
+      "effector_cost_usd": 2.394757,
+      "total_cost_usd": 2.431168,
+      "wall_clock_seconds": 0.0,
+      "dod_passed": false,
+      "contract_passed": true,
+      "contract_tests_passed": 17,
+      "contract_tests_total": 17,
+      "effector_retries": 0,
+      "first_pass_contract_success": true,
+      "craft_items_retrieved": [
+        "computed-field-recipe",
+        "sort-contract",
+        "validation-422-shape",
+        "cross-field-rule-recipe",
+        "relationship-ref-recipe",
+        "pagination-contract",
+        "fastapi-sqlite-scaffold"
+      ],
+      "craft_items_reused": [
+        "fastapi-sqlite-scaffold",
+        "validation-422-shape"
+      ],
+      "human_interventions": 0,
+      "security_events": [],
+      "trace_id": "tr_runA_quotes"
+    },
+    {
+      "position": 23,
+      "task_id": "subscriptions",
+      "tier": "medium",
+      "model_cost_usd": 0.070194,
+      "effector_cost_usd": 3.465097,
+      "total_cost_usd": 3.535291,
+      "wall_clock_seconds": 0.0,
+      "dod_passed": false,
+      "contract_passed": true,
+      "contract_tests_passed": 32,
+      "contract_tests_total": 32,
+      "effector_retries": 0,
+      "first_pass_contract_success": true,
+      "craft_items_retrieved": [
+        "cross-field-rule-recipe",
+        "sort-contract",
+        "validation-422-shape",
+        "computed-field-recipe",
+        "pagination-contract",
+        "relationship-ref-recipe",
+        "fastapi-sqlite-scaffold"
+      ],
+      "craft_items_reused": [
+        "fastapi-sqlite-scaffold",
+        "validation-422-shape"
+      ],
+      "human_interventions": 0,
+      "security_events": [],
+      "trace_id": "tr_runA_subscriptions"
+    },
+    {
+      "position": 24,
+      "task_id": "inventory",
+      "tier": "hard",
+      "model_cost_usd": 0.041328,
+      "effector_cost_usd": 4.088188,
+      "total_cost_usd": 4.129516,
+      "wall_clock_seconds": 0.0,
+      "dod_passed": false,
+      "contract_passed": false,
+      "contract_tests_passed": 55,
+      "contract_tests_total": 59,
+      "effector_retries": 0,
+      "first_pass_contract_success": false,
+      "craft_items_retrieved": [
+        "filter-contract",
+        "computed-field-recipe",
+        "cross-field-rule-recipe",
+        "sort-contract",
+        "validation-422-shape",
+        "relationship-ref-recipe",
+        "pagination-contract",
+        "fastapi-sqlite-scaffold"
+      ],
+      "craft_items_reused": [
+        "fastapi-sqlite-scaffold",
+        "computed-field-recipe",
+        "validation-422-shape",
+        "filter-contract",
+        "pagination-contract"
+      ],
+      "human_interventions": 0,
+      "security_events": [],
+      "trace_id": "tr_runA_inventory"
+    },
+    {
+      "position": 25,
+      "task_id": "habits",
+      "tier": "easy",
+      "model_cost_usd": 0.037848,
+      "effector_cost_usd": 2.640727,
+      "total_cost_usd": 2.678575,
+      "wall_clock_seconds": 0.0,
+      "dod_passed": false,
+      "contract_passed": true,
+      "contract_tests_passed": 18,
+      "contract_tests_total": 18,
+      "effector_retries": 0,
+      "first_pass_contract_success": true,
+      "craft_items_retrieved": [
+        "filter-contract",
+        "validation-422-shape",
+        "sort-contract",
+        "relationship-ref-recipe",
+        "computed-field-recipe",
+        "cross-field-rule-recipe",
+        "pagination-contract",
+        "fastapi-sqlite-scaffold"
+      ],
+      "craft_items_reused": [
+        "fastapi-sqlite-scaffold",
+        "validation-422-shape"
+      ],
+      "human_interventions": 0,
+      "security_events": [],
+      "trace_id": "tr_runA_habits"
+    },
+    {
+      "position": 26,
+      "task_id": "tickets",
+      "tier": "medium",
+      "model_cost_usd": 0.039642,
+      "effector_cost_usd": 4.208797,
+      "total_cost_usd": 4.248439,
+      "wall_clock_seconds": 0.0,
+      "dod_passed": false,
+      "contract_passed": true,
+      "contract_tests_passed": 40,
+      "contract_tests_total": 40,
+      "effector_retries": 0,
+      "first_pass_contract_success": true,
+      "craft_items_retrieved": [
+        "filter-contract",
+        "sort-contract",
+        "cross-field-rule-recipe",
+        "validation-422-shape",
+        "computed-field-recipe",
+        "relationship-ref-recipe",
+        "pagination-contract",
+        "fastapi-sqlite-scaffold"
+      ],
+      "craft_items_reused": [
+        "fastapi-sqlite-scaffold",
+        "validation-422-shape",
+        "filter-contract",
+        "pagination-contract"
+      ],
+      "human_interventions": 0,
+      "security_events": [],
+      "trace_id": "tr_runA_tickets"
+    },
+    {
+      "position": 27,
+      "task_id": "appointments",
+      "tier": "hard",
+      "model_cost_usd": 0.051819,
+      "effector_cost_usd": 4.304001,
+      "total_cost_usd": 4.35582,
+      "wall_clock_seconds": 0.0,
+      "dod_passed": false,
+      "contract_passed": false,
+      "contract_tests_passed": 49,
+      "contract_tests_total": 54,
+      "effector_retries": 0,
+      "first_pass_contract_success": false,
+      "craft_items_retrieved": [
+        "filter-contract",
+        "cross-field-rule-recipe",
+        "sort-contract",
+        "relationship-ref-recipe",
+        "computed-field-recipe",
+        "validation-422-shape",
+        "pagination-contract",
+        "fastapi-sqlite-scaffold"
+      ],
+      "craft_items_reused": [
+        "fastapi-sqlite-scaffold",
+        "validation-422-shape",
+        "cross-field-rule-recipe",
+        "relationship-ref-recipe",
+        "filter-contract"
+      ],
+      "human_interventions": 0,
+      "security_events": [],
+      "trace_id": "tr_runA_appointments"
+    },
+    {
+      "position": 28,
+      "task_id": "feeds",
+      "tier": "easy",
+      "model_cost_usd": 0.05076,
+      "effector_cost_usd": 2.793408,
+      "total_cost_usd": 2.844168,
+      "wall_clock_seconds": 0.0,
+      "dod_passed": false,
+      "contract_passed": true,
+      "contract_tests_passed": 15,
+      "contract_tests_total": 15,
+      "effector_retries": 0,
+      "first_pass_contract_success": true,
+      "craft_items_retrieved": [
+        "filter-contract",
+        "sort-contract",
+        "relationship-ref-recipe",
+        "computed-field-recipe",
+        "cross-field-rule-recipe",
+        "validation-422-shape",
+        "pagination-contract",
+        "fastapi-sqlite-scaffold"
+      ],
+      "craft_items_reused": [
+        "fastapi-sqlite-scaffold",
+        "validation-422-shape"
+      ],
+      "human_interventions": 0,
+      "security_events": [],
+      "trace_id": "tr_runA_feeds"
+    },
+    {
+      "position": 29,
+      "task_id": "venues",
+      "tier": "medium",
+      "model_cost_usd": 0.052254,
+      "effector_cost_usd": 3.33869,
+      "total_cost_usd": 3.390944,
+      "wall_clock_seconds": 0.0,
+      "dod_passed": false,
+      "contract_passed": true,
+      "contract_tests_passed": 47,
+      "contract_tests_total": 47,
+      "effector_retries": 0,
+      "first_pass_contract_success": true,
+      "craft_items_retrieved": [
+        "filter-contract",
+        "server-managed-fields-recipe",
+        "sort-contract",
+        "cross-field-rule-recipe",
+        "validation-422-shape",
+        "computed-field-recipe",
+        "pagination-contract",
+        "relationship-ref-recipe",
+        "fastapi-sqlite-scaffold"
+      ],
+      "craft_items_reused": [
+        "fastapi-sqlite-scaffold",
+        "server-managed-fields-recipe",
+        "validation-422-shape",
+        "filter-contract",
+        "pagination-contract"
+      ],
+      "human_interventions": 0,
+      "security_events": [],
+      "trace_id": "tr_runA_venues"
+    },
+    {
+      "position": 30,
+      "task_id": "invoices",
+      "tier": "hard",
+      "model_cost_usd": 0.055881,
+      "effector_cost_usd": 4.333781,
+      "total_cost_usd": 4.389662,
+      "wall_clock_seconds": 0.0,
+      "dod_passed": false,
+      "contract_passed": false,
+      "contract_tests_passed": 59,
+      "contract_tests_total": 61,
+      "effector_retries": 0,
+      "first_pass_contract_success": false,
+      "craft_items_retrieved": [
+        "filter-contract",
+        "validation-422-shape",
+        "computed-field-recipe",
+        "sort-contract",
+        "cross-field-rule-recipe",
+        "relationship-ref-recipe",
+        "server-managed-fields-recipe",
+        "unique-409-recipe",
+        "pagination-contract",
+        "fastapi-sqlite-scaffold"
+      ],
+      "craft_items_reused": [
+        "fastapi-sqlite-scaffold",
+        "server-managed-fields-recipe",
+        "validation-422-shape",
+        "computed-field-recipe",
+        "relationship-ref-recipe",
+        "filter-contract",
+        "pagination-contract"
+      ],
+      "human_interventions": 0,
+      "security_events": [],
+      "trace_id": "tr_runA_invoices"
+    }
+  ],
+  "aggregate": {
+    "warmup_tasks": 5,
+    "cost_slope_after_warmup": 0.0,
+    "cost_slope_ci": [
+      0.0,
+      0.0
+    ],
+    "min_detectable_slope": 0.0,
+    "control_run_present": false,
+    "treatment_vs_control_delta": 0.0,
+    "quality_holds": false,
+    "reuse_is_real": true,
+    "security_controls_held": true,
+    "note": "RECONSTRUCTED from workdir traces (Run A treatment: 30/30 COMPLETE). The git-tracked incremental ledger was rewound by a Conductor checkpoint/restore (it had been committed mid-run); the gitignored .context workdir retained the real per-task traces. Spend + contract + reuse are authoritative."
+  },
+  "decision": {
+    "status": "stopped",
+    "rationale": "Run A treatment: 30/30 COMPLETE. Reconstructed from durable traces after a checkpoint rewound the committed ledger. NOT a pass/stop decision \u2014 that is T-1.4 over Run A + the completed control Run B.",
+    "residual_risks": [
+      "Run B incomplete (4/30) \u2014 finish before T-1.4.",
+      "Ledger/results were reconstructed post-hoc from traces, not the live incremental ledger."
+    ]
+  }
+}

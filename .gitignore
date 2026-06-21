@@ -25,3 +25,7 @@ coverage.xml
 *.db
 *.sqlite
 *.sqlite3
+
+# T-1.3: live run ledgers stay OUT of git (a committed live ledger gets rewound by checkpoint/restore; the gitignored workdir is the durable source of truth)
+experiments/phase_minus_1/results/**/*.records.jsonl
+experiments/phase_minus_1/results/**/*.records.inflight
