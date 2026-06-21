@@ -31,6 +31,7 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from harness.craft import CraftItem
+from harness.errors import TransientDriverError, is_transient_message
 from harness.reflection import (
     TAXONOMY,
     canonical_for_feature,
@@ -414,6 +415,11 @@ class AnthropicDriver:
                         self._sleep(self.backoff_base**attempt)
                         continue
                     break  # non-retryable or retries exhausted -> try the fallback model
+        # Both models exhausted. A transient/infra failure (429/529/502 token-refresh/
+        # timeout) is NOT an agent failure: surface it as TransientInfraError so the
+        # orchestrator excludes the task instead of recording a false first-pass failure.
+        if last_exc is not None and _is_retryable(last_exc):
+            raise TransientDriverError(str(last_exc), stage="driver") from last_exc
         raise last_exc  # type: ignore[misc]
 
     def _va(self, model: str) -> dict:
@@ -535,23 +541,24 @@ class AnthropicDriver:
 
 
 _RETRYABLE_EXC_NAMES = {
+    # Specific transient/infra exception types only. NOT the base APIStatusError — that
+    # covers 4xx client errors (400/401/403/422) which are real driver bugs, not infra, and
+    # must NOT be retried-then-excluded (that would mask a defect as an infra exclusion).
     "RateLimitError",
     "InternalServerError",
     "APIConnectionError",
     "APITimeoutError",
-    "APIStatusError",
     "OverloadedError",
 }
-_RETRYABLE_SUBSTRINGS = ("rate_limit", "overloaded", "429", "529", "timeout", "connection")
 
 
 def _is_retryable(exc: Exception) -> bool:
     """Transient API errors worth retrying the same model for (anthropic exception type
-    names + message heuristics, so we needn't import anthropic to classify)."""
+    names + the shared message heuristics — incl 502/token-refresh — so we needn't import
+    anthropic to classify)."""
     if type(exc).__name__ in _RETRYABLE_EXC_NAMES:
         return True
-    msg = str(exc).lower()
-    return any(s in msg for s in _RETRYABLE_SUBSTRINGS)
+    return is_transient_message(str(exc))
 
 
 def _first_tool_input(resp: Any) -> dict:

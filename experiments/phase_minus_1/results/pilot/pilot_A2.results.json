@@ -1,0 +1,177 @@
+{
+  "protocol_version": "v3",
+  "run_id": "pilot_A2",
+  "run_kind": "experiment",
+  "started_at": "2026-06-20T21:33:48Z",
+  "completed_at": "2026-06-20T22:00:44Z",
+  "pins": {
+    "model_ids": [
+      "claude-opus-4-8",
+      "claude-haiku-4-5",
+      "claude-sonnet-4-6"
+    ],
+    "effector_version": "claude-code-cli (headless -p, --output-format json)",
+    "pricing_snapshot": "claude-api reference, cached 2026-05-26",
+    "cache_policy": "effector default (ephemeral prompt cache); harness makes no model calls in the spine",
+    "retrieval_config": "vector retrieval (BAAI/bge-small-en-v1.5, normalized, cosine top-k=13 = full library; bge query-prefix on the query only); keyword/tag fallback (ADR-0020 \u00a75)",
+    "effector_model": "claude-opus-4-8",
+    "fallback_model": "claude-haiku-4-5",
+    "token_prices": {
+      "claude-opus-4-8": {
+        "input": 5.0,
+        "output": 25.0
+      },
+      "claude-haiku-4-5": {
+        "input": 1.0,
+        "output": 5.0
+      },
+      "claude-sonnet-4-6": {
+        "input": 3.0,
+        "output": 15.0
+      }
+    },
+    "embedding_model": "BAAI/bge-small-en-v1.5",
+    "effector_allowed_tools": [
+      "Read",
+      "Write",
+      "Edit",
+      "Bash"
+    ],
+    "permission_mode": "acceptEdits",
+    "budget_cap_usd": 10.0,
+    "sandbox_profile": "coding-effector-default",
+    "network_policy": "deny-by-default; allowlist PyPI + Anthropic API for the real run (experiment-only)",
+    "driver": {
+      "model": "claude-sonnet-4-6",
+      "fallback_model": "claude-haiku-4-5",
+      "temperature": 0.0,
+      "max_tokens": 8000
+    },
+    "embedding": {
+      "model_id": "BAAI/bge-small-en-v1.5",
+      "revision": "5c38ec7c405ec4b44b94cc5a9bb96e735b38267a",
+      "sentence_transformers_version": "5.6.0",
+      "torch_version": "2.12.1",
+      "normalize": true,
+      "similarity": "cosine",
+      "k": 13,
+      "query_prefix": "Represent this sentence for searching relevant passages:"
+    }
+  },
+  "tasks": [
+    {
+      "position": 1,
+      "task_id": "notes",
+      "tier": "easy",
+      "model_cost_usd": 0.033174,
+      "effector_cost_usd": 1.817209,
+      "total_cost_usd": 1.850383,
+      "wall_clock_seconds": 306.204,
+      "dod_passed": true,
+      "contract_passed": true,
+      "contract_tests_passed": 17,
+      "contract_tests_total": 17,
+      "effector_retries": 0,
+      "first_pass_contract_success": true,
+      "craft_items_retrieved": [],
+      "craft_items_reused": [],
+      "human_interventions": 0,
+      "security_events": [],
+      "trace_id": "tr_pilot_A2_notes"
+    },
+    {
+      "position": 2,
+      "task_id": "books",
+      "tier": "medium",
+      "model_cost_usd": 0.031293,
+      "effector_cost_usd": 2.908512,
+      "total_cost_usd": 2.939805,
+      "wall_clock_seconds": 583.044,
+      "dod_passed": false,
+      "contract_passed": false,
+      "contract_tests_passed": 0,
+      "contract_tests_total": 1,
+      "effector_retries": 0,
+      "first_pass_contract_success": false,
+      "craft_items_retrieved": [
+        "fastapi-sqlite-scaffold"
+      ],
+      "craft_items_reused": [
+        "fastapi-sqlite-scaffold"
+      ],
+      "human_interventions": 0,
+      "security_events": [],
+      "trace_id": "tr_pilot_A2_books"
+    },
+    {
+      "position": 3,
+      "task_id": "orders",
+      "tier": "hard",
+      "model_cost_usd": 0.02928,
+      "effector_cost_usd": 4.103731,
+      "total_cost_usd": 4.133011,
+      "wall_clock_seconds": 727.343,
+      "dod_passed": false,
+      "contract_passed": false,
+      "contract_tests_passed": 0,
+      "contract_tests_total": 1,
+      "effector_retries": 0,
+      "first_pass_contract_success": false,
+      "craft_items_retrieved": [
+        "fastapi-sqlite-scaffold"
+      ],
+      "craft_items_reused": [
+        "fastapi-sqlite-scaffold"
+      ],
+      "human_interventions": 0,
+      "security_events": [],
+      "trace_id": "tr_pilot_A2_orders"
+    }
+  ],
+  "aggregate": {
+    "warmup_tasks": 5,
+    "cost_slope_after_warmup": 0.0,
+    "cost_slope_ci": [
+      0.0,
+      0.0
+    ],
+    "min_detectable_slope": 0.0,
+    "control_run_present": false,
+    "treatment_vs_control_delta": 0.0,
+    "quality_holds": false,
+    "reuse_is_real": true,
+    "security_controls_held": true,
+    "run_mode": "treatment",
+    "retrieval_diagnostic": {
+      "positions": 3,
+      "mean_curated_recall": 1.0,
+      "mean_auto_recall": null,
+      "mean_curated_precision": 0.666667,
+      "mean_incorporation_precision": 0.666667,
+      "mean_incorporation_curated_precision": 1.0,
+      "mean_incorporation_curated_recall": 1.0,
+      "divergent_positions": 2,
+      "per_position_curated_recall": [
+        null,
+        1.0,
+        1.0
+      ],
+      "per_position_incorporation_curated_recall": [
+        null,
+        1.0,
+        1.0
+      ],
+      "craft_canonical_pct_min": 1.0
+    },
+    "note": "Pilot/partial single-arm run (G1 gate): n too small for a slope; warm-up/slope/CI are placeholders. The real decision is the 30-task Run A + the mandatory control Run B with the pre-registered test (ADR-0017, T-1.4)."
+  },
+  "decision": {
+    "status": "stopped",
+    "rationale": "PILOT/PARTIAL run (run_mode=treatment), stopped at the ADR-0020 G1 gate. 3 task(s); not a full experimental decision (requires 30 tasks + the mandatory control run, ADR-0017/T-1.4). Reviewed for craft quality, reuse, and retrieval precision before authorizing the full run.",
+    "residual_risks": [
+      "Single arm, partial task set: no cost slope, no warm-up exclusion, no test.",
+      "Control delta (Run A vs Run B) is computed in T-1.4, not here.",
+      "Craft quality is judged at the G1 review, not asserted by the harness."
+    ]
+  }
+}

@@ -173,6 +173,46 @@ RE-ASK genericness guards still apply to whatever craft the driver then writes. 
 re-pilot (positions 1–6) validates the fixed boot env on real, diverse medium/hard services
 before the full 30×2 is authorized.
 
+## Addendum (2026-06-20) — full-run operational hardening (decisions 16–19)
+
+The extended re-pilot (`pilot_A3`, positions 1–6) validated the boot-PATH fix on real
+medium/hard services (books 51/54, orders 58/59, products 40/40 — all booted, full sub-test
+resolution) but **crashed at task 6 on a gateway `502: token refresh failed`** during
+reflect, losing the consolidated results — a live demonstration that the harness (built for
+pilots) is not ready for an unattended ~$300 / ~10 h / 60-task run. A 4-agent readiness
+audit confirmed four HIGH gaps. All four are now built (TDD + deterministic failure-mode
+proofs in `tests/integration/test_fullrun_ops.py` + `test_experiment_runner.py`):
+
+**16. Resumability.** Each per-task record is appended to a durable, fsync'd
+`<run_id>.records.jsonl` as it completes (also the tail-able live progress log). `--resume`
+skips positions already in the ledger and reloads their records into the final aggregate;
+a fresh run reuses the persisted craft dir only on resume. Proof: kill mid-loop → resume
+runs only the missing positions, **no craft re-mutation, no re-spend**.
+
+**17. Global budget cap.** `global_budget_cap_usd` (set to **$350** for the 30×2, ~1.8× the
+~$188 estimate) — `run_sequence` accumulates spend and aborts with a recorded stop; the cap
+spans both arms in the A-then-B driver. (The per-tier caps remain recorded; the `claude`
+CLI has no hard $ flag, so the global accumulator is the real backstop.)
+
+**18. Transient/credential handling.** The effector now retries transient CLI errors
+(429/529/**502 token-refresh**/timeout) with backoff, mirroring the driver; a persistent
+transient raises `TransientInfraError`. The orchestrator records such a task as
+`excluded_from_slope` with an `exclusion_reason` — **never a false `first_pass=False`** (which
+would corrupt the primary signal) — and stops after K consecutive infra failures (a
+sustained gateway/credential outage). A transient in *reflect* (after the gate) retains the
+task's valid result and only skips reflection. Proof: a 502 → excluded, not a failure; the
+run does not crash.
+
+**19. A-then-B run driver (`experiment_cli.run_experiment`).** One invocation, one frozen
+`RunConfig`, embedder loaded **once** (pins captured once), runs Run A (1–30, accumulates)
+then Run B (1–30, frozen-empty + run-and-discard) over the identical order. `assert_prompt_
+parity` raises if the prompt or decoding differ between arms; A and B use **separate** craft
+dirs and B's must be empty, so the control **physically cannot read** A's library. Proofs:
+the parity assert FIRES on a mismatch; B's craft dir stays empty / unreadable from A.
+
+The harness emits **data only** — the treatment-minus-control delta and the pre-registered
+pass/stop decision are T-1.4, never written here.
+
 ## Consequences
 
 - **Positive:** the embedding pin is fully reproducible and zero-cost; reuse is verified

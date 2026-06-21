@@ -29,6 +29,7 @@ Invariants (ADR-0020 §2/§6):
 from __future__ import annotations
 
 import json
+import os
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -39,7 +40,8 @@ import httpx
 from harness.compiler import SuiteResult, run_suite
 from harness.craft import CraftItem, CraftLibrary
 from harness.craftimpact import RunningBaseline, quarantine_harmful, update_craft_metrics
-from harness.driver import Driver, GateOutcome, verify_incorporated
+from harness.driver import Driver, GateOutcome, ReflectResult, verify_incorporated
+from harness.errors import TransientInfraError
 from harness.effector import Effector, EffectorTask, drive_coding_effector
 from harness.gold import GoldMap, RetrievalDiagnostic, retrieval_diagnostic, summarize_diagnostics
 from harness.render import write_pytest_module
@@ -267,14 +269,29 @@ def run_one_task(
     )
 
     # --- E. reflect (ALWAYS runs -> driver-cost parity) -------------------- #
-    reflect = inputs.driver.reflect(
-        spec=spec,
-        feature_tags=task.feature_tags,
-        retrieved=retrieved_items,
-        incorporated=reused_ids,
-        gate=gate,
-        library=inputs.library,
-    )
+    # A transient/infra error in reflect must NOT lose the task: the gate already ran, so
+    # the task's result + cost are valid — record them, just skip reflection this task.
+    # (A transient in compose/effector, above, has no valid result and propagates to the
+    # orchestrator, which excludes the task.)
+    try:
+        reflect = inputs.driver.reflect(
+            spec=spec,
+            feature_tags=task.feature_tags,
+            retrieved=retrieved_items,
+            incorporated=reused_ids,
+            gate=gate,
+            library=inputs.library,
+        )
+    except TransientInfraError as exc:
+        reflect = ReflectResult(
+            "SKIP",
+            None,
+            None,
+            0,
+            0,
+            cfg.driver_model or "unknown",
+            f"reflection skipped (transient infra error, task result retained): {exc}",
+        )
     craft_written: str | None = None
     if run_mode == TREATMENT and reflect.action in ("WRITE", "UPDATE") and reflect.craft_item:
         leaks = project_strip_lint(reflect.craft_item.body, spec)
@@ -375,6 +392,69 @@ def run_one_task(
 # --------------------------------------------------------------------------- #
 # A run over a sequence of positions
 # --------------------------------------------------------------------------- #
+def _append_record(records_path: Path | None, record: dict) -> None:
+    """Append one per-task record as a JSON line (fsync) — a durable, tail-able ledger so a
+    crash loses at most the in-flight task and ``--resume`` can skip what completed."""
+    if records_path is None:
+        return
+    records_path.parent.mkdir(parents=True, exist_ok=True)
+    with records_path.open("a") as fh:
+        fh.write(json.dumps(record) + "\n")
+        fh.flush()
+        os.fsync(fh.fileno())
+
+
+def _load_prior_records(records_path: Path | None) -> list[dict]:
+    """Read the durable ledger, tolerating a torn final line (a crash mid-write) by skipping
+    unparseable lines, and de-duplicating by position (keep the last record for a position) so
+    an accidental re-append never double-counts. Order follows first appearance."""
+    if records_path is None or not records_path.exists():
+        return []
+    by_pos: dict[int, dict] = {}
+    order: list[int] = []
+    for ln in records_path.read_text().splitlines():
+        ln = ln.strip()
+        if not ln:
+            continue
+        try:
+            rec = json.loads(ln)
+        except json.JSONDecodeError:
+            continue  # torn/partial line from a crash mid-write — skip it, keep the rest
+        pos = rec["position"]
+        if pos not in by_pos:
+            order.append(pos)
+        by_pos[pos] = rec
+    return [by_pos[p] for p in order]
+
+
+def _excluded_record(
+    task: TaskInfo, *, reason: str, cost_usd: float, kind: str = "transient"
+) -> dict:
+    """A per-task record for an INFRASTRUCTURE/unexpected failure — marked excluded_from_slope
+    so T-1.4 never counts it as a real first-pass/contract failure (ADR-0017: exclude only
+    failures unrelated to the agent). ``kind`` is 'transient' (gateway/credential) or 'error'
+    (an unexpected exception we caught so one task can't crash a 10h run)."""
+    return build_task_record(
+        position=task.position,
+        task_id=task.id,
+        tier=task.tier,
+        model_cost_usd=0.0,
+        effector_cost_usd=round(cost_usd, 6),
+        tool_cost_usd=0.0,
+        wall_clock_seconds=0.0,
+        dod_passed=False,
+        contract_tests_passed=0,
+        contract_tests_total=1,
+        effector_retries=0,
+        first_pass_contract_success=False,
+        craft_retrieved=[],
+        craft_reused=[],
+        trace_id=f"tr_excluded_{task.id}",
+        excluded_from_slope=True,
+        exclusion_reason=f"infrastructure ({kind}): {reason}",
+    )
+
+
 def run_sequence(
     positions: list[int],
     *,
@@ -382,42 +462,169 @@ def run_sequence(
     inputs: RunInputs,
     run_id: str,
     taskset_path: str | Path = DEFAULT_TASKSET,
+    records_path: Path | None = None,
+    resume: bool = False,
+    global_budget_cap_usd: float | None = None,
+    max_consecutive_infra_failures: int = 3,
 ) -> OrchestratorResult:
     if run_mode not in (TREATMENT, CONTROL):
         raise ValueError(f"run_mode must be {TREATMENT!r} or {CONTROL!r}, got {run_mode!r}")
+    # Fresh run must not append to an existing ledger (that would duplicate positions + double
+    # count spend on a later resume). Require --resume, or a fresh path/run_id.
+    if not resume and records_path is not None and _load_prior_records(records_path):
+        raise ValueError(
+            f"{records_path} already has records — refusing to append (would duplicate positions). "
+            "Pass resume=True to continue this run, or use a fresh path/run_id."
+        )
     by_pos = {t.position: t for t in load_taskset(taskset_path)}
     started_at = _now()
+
+    # Resume: skip positions already in the durable ledger; carry their spend + records, and
+    # REBUILD the baseline from prior (non-excluded) records so quarantine decisions match an
+    # uninterrupted run (craft metrics are persisted on disk; the baseline must be too).
+    prior_records = _load_prior_records(records_path) if resume else []
+    done_positions = {r["position"] for r in prior_records}
+    spent = sum(r["total_cost_usd"] for r in prior_records)
     baseline = RunningBaseline()
+    for r in prior_records:
+        if not r.get("excluded_from_slope"):
+            baseline.update(
+                first_pass=r["first_pass_contract_success"], effector_retries=r["effector_retries"]
+            )
+
     tasks: list[TaskArtifacts] = []
+    extra_records: list[dict] = []  # excluded records, not tied to a TaskArtifacts
+    stop_reason: str | None = None
+    consecutive_infra = 0
+
+    # In-flight marker: written before each task, cleared after its record is durable. On
+    # resume, a position with a live marker but no record crashed mid-task — its craft may be
+    # half-mutated, so we record it EXCLUDED and do NOT re-run it (closing the craft
+    # double-mutation window the audit flagged). It can be re-run later by clearing the record.
+    inflight_path = records_path.with_suffix(".inflight") if records_path is not None else None
+    if resume and inflight_path is not None and inflight_path.exists():
+        crashed = inflight_path.read_text().strip()
+        if crashed.isdigit() and int(crashed) not in done_positions and int(crashed) in by_pos:
+            rec = _excluded_record(
+                by_pos[int(crashed)],
+                reason="crashed mid-task before its record was durable; not re-run (craft may be "
+                "partially mutated)",
+                cost_usd=0.0,
+                kind="error",
+            )
+            _append_record(records_path, rec)
+            prior_records.append(rec)
+            done_positions.add(int(crashed))
+            spent += rec["total_cost_usd"]
+        inflight_path.unlink()
+
+    def _mark_inflight(pos: int) -> None:
+        if inflight_path is None:
+            return
+        inflight_path.parent.mkdir(parents=True, exist_ok=True)
+        with inflight_path.open("w") as fh:
+            fh.write(str(pos))
+            fh.flush()
+            os.fsync(fh.fileno())  # durable before the task mutates craft (hard-kill safety)
+
+    def _clear_inflight() -> None:
+        if inflight_path is not None and inflight_path.exists():
+            inflight_path.unlink()
+
+    def _exclude(pos: int, *, reason: str, cost_usd: float, kind: str) -> bool:
+        """Record an excluded task; return True if the run should stop (K consecutive)."""
+        nonlocal spent, consecutive_infra
+        rec = _excluded_record(by_pos[pos], reason=reason, cost_usd=cost_usd, kind=kind)
+        _append_record(records_path, rec)
+        extra_records.append(rec)
+        spent += rec["total_cost_usd"]
+        consecutive_infra += 1
+        return consecutive_infra >= max_consecutive_infra_failures
+
     for pos in positions:
-        tasks.append(
-            run_one_task(
+        if pos in done_positions:
+            continue  # already completed in a prior run (resume) — never re-run / re-spend
+        if global_budget_cap_usd is not None and spent >= global_budget_cap_usd:
+            stop_reason = (
+                f"global budget cap ${global_budget_cap_usd:.2f} reached (spent ${spent:.2f})"
+            )
+            break
+        _mark_inflight(pos)
+        try:
+            art = run_one_task(
                 inputs=inputs, task=by_pos[pos], run_mode=run_mode, run_id=run_id, baseline=baseline
             )
-        )
+        except TransientInfraError as exc:
+            _clear_inflight()
+            # Persistent transient (gateway/credential) -> EXCLUDE (infra), not a false failure;
+            # stop if it is down for K in a row.
+            if _exclude(pos, reason=str(exc), cost_usd=exc.cost_usd, kind="transient"):
+                stop_reason = f"{consecutive_infra} consecutive infrastructure failures: {exc}"
+                break
+            continue
+        except Exception as exc:  # noqa: BLE001 - never let ONE task crash a 10h unattended run
+            # An unexpected (non-transient) error is caught + excluded so the run survives; it
+            # is flagged for T-1.4 and counts toward the consecutive-failure stop (a real bug
+            # that recurs will halt the run rather than burn the budget).
+            _clear_inflight()
+            if _exclude(pos, reason=f"{type(exc).__name__}: {exc}", cost_usd=0.0, kind="error"):
+                stop_reason = f"{consecutive_infra} consecutive task errors: {exc}"
+                break
+            continue
+        consecutive_infra = 0
+        tasks.append(art)
+        _append_record(records_path, art.record)
+        _clear_inflight()
+        spent += art.record["total_cost_usd"]
+        if global_budget_cap_usd is not None and spent >= global_budget_cap_usd:
+            stop_reason = (
+                f"global budget cap ${global_budget_cap_usd:.2f} reached after task "
+                f"{pos} (spent ${spent:.2f})"
+            )
+            break
     completed_at = _now()
 
-    records = [a.record for a in tasks]
+    new_records = [a.record for a in tasks] + extra_records
+    records = prior_records + new_records
     diagnostics = [a.diagnostic for a in tasks]
     diag_summary = summarize_diagnostics(diagnostics)
-    # run-health (G1 condition 4): the worst per-task %-canonical (always 1.0 unless a
-    # drift slipped past assert_craft_canonical, which would already have raised).
     diag_summary["craft_canonical_pct_min"] = min(
         (a.craft_canonical_pct for a in tasks), default=1.0
     )
+    diag_summary["resumed_prior_tasks"] = len(prior_records)
+    diag_summary["excluded_infra_tasks"] = sum(1 for r in records if r.get("excluded_from_slope"))
+    diag_summary["total_spend_usd"] = round(spent, 4)
+    # structured stop signal for an unattended monitor (not just free-text rationale)
+    diag_summary["stopped_early"] = stop_reason is not None
+    diag_summary["stop_reason"] = stop_reason
 
-    results_doc = build_results(
-        run_id=run_id,
-        run_kind="experiment",
-        started_at=started_at,
-        completed_at=completed_at,
-        pins=inputs.config.to_pins(),
-        tasks=records,
-        aggregate=_aggregate(records, run_mode, diag_summary),
-        decision=_pilot_decision(records, run_mode),
-        protocol_version=inputs.config.protocol_version,
-    )
-    validate_results(results_doc)
+    if records:
+        results_doc = build_results(
+            run_id=run_id,
+            run_kind="experiment",
+            started_at=started_at,
+            completed_at=completed_at,
+            pins=inputs.config.to_pins(),
+            tasks=records,
+            aggregate=_aggregate(records, run_mode, diag_summary),
+            decision=_pilot_decision(records, run_mode, stop_reason=stop_reason),
+            protocol_version=inputs.config.protocol_version,
+        )
+        validate_results(results_doc)
+    else:
+        # Degenerate: nothing ran (e.g. resumed with the budget already exhausted). Don't
+        # crash on the schema's tasks>=1 — emit an explicit, unvalidated zero-task stop doc.
+        results_doc = {
+            "protocol_version": inputs.config.protocol_version,
+            "run_id": run_id,
+            "run_kind": "experiment",
+            "started_at": started_at,
+            "completed_at": completed_at,
+            "pins": inputs.config.to_pins(),
+            "tasks": [],
+            "aggregate": _aggregate([], run_mode, diag_summary),
+            "decision": _pilot_decision([], run_mode, stop_reason=stop_reason or "no tasks ran"),
+        }
 
     return OrchestratorResult(
         run_id=run_id,
@@ -433,8 +640,11 @@ def run_sequence(
 
 
 def _aggregate(records: list[dict], run_mode: str, diag_summary: dict) -> dict:
-    quality = all(r["contract_passed"] and r["dod_passed"] for r in records)
-    reuse = any(r["craft_items_reused"] for r in records)
+    # Quality/reuse are computed over SCORED tasks only — excluded (infra/error) records must
+    # not drag quality_holds down or be read as real outcomes.
+    scored = [r for r in records if not r.get("excluded_from_slope")]
+    quality = all(r["contract_passed"] and r["dod_passed"] for r in scored)
+    reuse = any(r["craft_items_reused"] for r in scored)
     security_ok = all(not r.get("security_events") for r in records)
     return {
         "warmup_tasks": 5,
@@ -458,18 +668,20 @@ def _aggregate(records: list[dict], run_mode: str, diag_summary: dict) -> dict:
     }
 
 
-def _pilot_decision(records: list[dict], run_mode: str) -> dict:
+def _pilot_decision(records: list[dict], run_mode: str, *, stop_reason: str | None = None) -> dict:
+    rationale = (
+        f"Single-arm run (run_mode={run_mode}), {len(records)} task(s). This harness emits "
+        "DATA ONLY — it never writes a pass/stop experimental decision; the treatment-vs-"
+        "control delta + the pre-registered test are computed in T-1.4 (ADR-0017). "
+    )
+    if stop_reason:
+        rationale += f"Run halted early by a runtime guard: {stop_reason}."
     return {
         "status": "stopped",
-        "rationale": (
-            f"PILOT/PARTIAL run (run_mode={run_mode}), stopped at the ADR-0020 G1 gate. "
-            f"{len(records)} task(s); not a full experimental decision (requires 30 tasks "
-            "+ the mandatory control run, ADR-0017/T-1.4). Reviewed for craft quality, "
-            "reuse, and retrieval precision before authorizing the full run."
-        ),
+        "rationale": rationale,
         "residual_risks": [
-            "Single arm, partial task set: no cost slope, no warm-up exclusion, no test.",
-            "Control delta (Run A vs Run B) is computed in T-1.4, not here.",
-            "Craft quality is judged at the G1 review, not asserted by the harness.",
+            "Data-only artifact: no pass/stop decision is made here (that is T-1.4).",
+            "Control delta (Run A vs Run B) + the slope test are computed in T-1.4.",
+            *([f"Early stop: {stop_reason}"] if stop_reason else []),
         ],
     }

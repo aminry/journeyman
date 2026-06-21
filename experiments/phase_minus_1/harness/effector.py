@@ -25,10 +25,12 @@ import json
 import os
 import re
 import subprocess
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
 
+from harness.errors import TransientEffectorError, is_transient_message
 from harness.runconfig import RunConfig
 
 _REFERENCE_SERVICE = Path(__file__).resolve().parent / "reference" / "service.py"
@@ -264,34 +266,87 @@ class FakeEffector:
 # --------------------------------------------------------------------------- #
 # Real effector: Claude Code CLI (headless). Never invoked by tests/CI.
 # --------------------------------------------------------------------------- #
+def is_transient_cli_result(obj: dict, returncode: int, stderr: str) -> bool:
+    """True if a claude-CLI result looks like a transient/infra failure (gateway 429/529/
+    502 token-refresh, timeout, connection) rather than a real build attempt — so it can be
+    retried, and ultimately EXCLUDED, not recorded as a genuine first-pass failure."""
+    errored = bool(obj.get("is_error")) or returncode != 0
+    text = f"{obj.get('result', '')} {obj.get('stderr', '')} {stderr or ''}"
+    return errored and is_transient_message(text)
+
+
 class ClaudeCodeEffector:
-    """Drives the real ``claude`` CLI in headless mode for the single real run."""
+    """Drives the real ``claude`` CLI in headless mode. Retries transient API/infra errors
+    (gateway 429/529/502 token-refresh, timeouts) with backoff — mirroring the driver — so a
+    long unattended run survives blips; a persistent transient raises TransientEffectorError
+    so the orchestrator EXCLUDES the task instead of recording a false failure. The CLI
+    invocation is injectable (``invoker``) so the retry/exclusion logic is testable with zero
+    spend; the real path uses subprocess."""
 
     def __init__(
-        self, config: RunConfig, *, artifact_dir: Path | None = None, timeout_s: int = 3600
+        self,
+        config: RunConfig,
+        *,
+        artifact_dir: Path | None = None,
+        timeout_s: int = 3600,
+        max_retries: int = 4,
+        backoff_base: float = 2.0,
+        sleep: Any = None,
+        invoker: Any = None,
     ):
         self.config = config
         self.artifact_dir = artifact_dir
         self.timeout_s = timeout_s
+        self.max_retries = max_retries
+        self.backoff_base = backoff_base
+        self._sleep = sleep if sleep is not None else time.sleep
+        self._invoker = invoker
 
     def build_command(self, prompt: str) -> list[str]:
         return self.config.render_effector_command(prompt)
 
-    def run(self, task: EffectorTask) -> EffectorSession:  # pragma: no cover - real spend path
-        cmd = self.build_command(task.taskspec_text)
-        env = dict(os.environ)  # ANTHROPIC_API_KEY passes through; never logged/committed
-        proc = subprocess.run(
-            cmd,
-            cwd=str(task.repo_dir),
-            capture_output=True,
-            text=True,
-            timeout=self.timeout_s,
-            env=env,
+    def _invoke(self, cmd: list[str], cwd: str, env: dict) -> tuple[dict, int, str]:
+        """Run the CLI once -> (parsed result obj, returncode, stderr). Injectable for tests."""
+        if self._invoker is not None:
+            return self._invoker(cmd, cwd, env)
+        proc = subprocess.run(  # pragma: no cover - real spend path
+            cmd, cwd=cwd, capture_output=True, text=True, timeout=self.timeout_s, env=env
         )
         try:
             obj = json.loads(proc.stdout)
         except json.JSONDecodeError:
             obj = {"is_error": True, "result": proc.stdout[-2000:], "stderr": proc.stderr[-2000:]}
+        return obj, proc.returncode, proc.stderr
+
+    def run(self, task: EffectorTask) -> EffectorSession:
+        cmd = self.build_command(task.taskspec_text)
+        env = dict(os.environ)  # ANTHROPIC_API_KEY passes through; never logged/committed
+        obj: dict = {}
+        returncode = 0
+        for attempt in range(self.max_retries + 1):
+            try:
+                obj, returncode, stderr = self._invoke(cmd, str(task.repo_dir), env)
+            except subprocess.TimeoutExpired as exc:
+                if attempt < self.max_retries:
+                    self._sleep(self.backoff_base**attempt)
+                    continue
+                raise TransientEffectorError(
+                    f"effector timed out after {self.max_retries} retries", stage="effector"
+                ) from exc
+            if is_transient_cli_result(obj, returncode, stderr):
+                if attempt < self.max_retries:
+                    self._sleep(self.backoff_base**attempt)
+                    continue
+                # Capture any real spend the failed attempts already incurred (the CLI reports
+                # total_cost_usd even on an error) so the global budget cap doesn't under-count.
+                spent = parse_cli_result(obj, self.config).cost_usd
+                raise TransientEffectorError(
+                    f"effector hit a transient API/infra error after {self.max_retries} retries: "
+                    f"{str(obj.get('result') or obj.get('stderr') or stderr)[:160]}",
+                    stage="effector",
+                    cost_usd=spent,
+                )
+            break  # a non-transient result (real success or a real build failure) -> evaluate it
         parsed = parse_cli_result(obj, self.config)
         diff, files = capture_git_diff(Path(task.repo_dir))
         secrets = [v for k, v in os.environ.items() if "KEY" in k or "TOKEN" in k]
@@ -306,7 +361,7 @@ class ClaudeCodeEffector:
             tokens_in=parsed.tokens_in,
             tokens_out=parsed.tokens_out,
             retries=0,
-            success=parsed.success and proc.returncode == 0,
+            success=parsed.success and returncode == 0,
             files_changed=files,
             commands_run=[" ".join(cmd[:6]) + " ..."],
             num_turns=parsed.num_turns,
