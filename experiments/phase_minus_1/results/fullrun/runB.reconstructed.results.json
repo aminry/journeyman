@@ -1,0 +1,166 @@
+{
+  "protocol_version": "v3",
+  "run_id": "runB",
+  "run_kind": "experiment",
+  "started_at": "2026-06-20T17:40:00Z",
+  "completed_at": "2026-06-21T06:05:00Z",
+  "pins": {
+    "model_ids": [
+      "claude-opus-4-8",
+      "claude-haiku-4-5",
+      "claude-sonnet-4-6"
+    ],
+    "effector_version": "claude-code-cli (headless -p, --output-format json)",
+    "pricing_snapshot": "claude-api reference, cached 2026-05-26",
+    "cache_policy": "effector default (ephemeral prompt cache); harness makes no model calls in the spine",
+    "retrieval_config": "vector retrieval (BAAI/bge-small-en-v1.5, normalized, cosine top-k=13 = full library; bge query-prefix on the query only); keyword/tag fallback (ADR-0020 \u00a75)",
+    "effector_model": "claude-opus-4-8",
+    "fallback_model": "claude-haiku-4-5",
+    "token_prices": {
+      "claude-opus-4-8": {
+        "input": 5.0,
+        "output": 25.0
+      },
+      "claude-haiku-4-5": {
+        "input": 1.0,
+        "output": 5.0
+      },
+      "claude-sonnet-4-6": {
+        "input": 3.0,
+        "output": 15.0
+      }
+    },
+    "embedding_model": "BAAI/bge-small-en-v1.5",
+    "effector_allowed_tools": [
+      "Read",
+      "Write",
+      "Edit",
+      "Bash"
+    ],
+    "permission_mode": "acceptEdits",
+    "budget_cap_usd": 10.0,
+    "sandbox_profile": "coding-effector-default",
+    "network_policy": "deny-by-default; allowlist PyPI + Anthropic API for the real run (experiment-only)",
+    "driver": {
+      "model": "claude-sonnet-4-6",
+      "fallback_model": "claude-haiku-4-5",
+      "temperature": 0.0,
+      "max_tokens": 8000
+    },
+    "embedding": {
+      "model_id": "BAAI/bge-small-en-v1.5",
+      "revision": "5c38ec7c405ec4b44b94cc5a9bb96e735b38267a",
+      "sentence_transformers_version": "5.6.0",
+      "torch_version": "2.12.1",
+      "normalize": true,
+      "similarity": "cosine",
+      "k": 13,
+      "query_prefix": "Represent this sentence for searching relevant passages:"
+    }
+  },
+  "tasks": [
+    {
+      "position": 1,
+      "task_id": "notes",
+      "tier": "easy",
+      "model_cost_usd": 0.03141,
+      "effector_cost_usd": 2.715232,
+      "total_cost_usd": 2.746642,
+      "wall_clock_seconds": 0.0,
+      "dod_passed": true,
+      "contract_passed": true,
+      "contract_tests_passed": 17,
+      "contract_tests_total": 17,
+      "effector_retries": 0,
+      "first_pass_contract_success": true,
+      "craft_items_retrieved": [],
+      "craft_items_reused": [],
+      "human_interventions": 0,
+      "security_events": [],
+      "trace_id": "tr_runB_notes"
+    },
+    {
+      "position": 2,
+      "task_id": "books",
+      "tier": "medium",
+      "model_cost_usd": 0.056307,
+      "effector_cost_usd": 2.554931,
+      "total_cost_usd": 2.611238,
+      "wall_clock_seconds": 0.0,
+      "dod_passed": true,
+      "contract_passed": true,
+      "contract_tests_passed": 54,
+      "contract_tests_total": 54,
+      "effector_retries": 0,
+      "first_pass_contract_success": true,
+      "craft_items_retrieved": [],
+      "craft_items_reused": [],
+      "human_interventions": 0,
+      "security_events": [],
+      "trace_id": "tr_runB_books"
+    },
+    {
+      "position": 3,
+      "task_id": "orders",
+      "tier": "hard",
+      "model_cost_usd": 0.056706,
+      "effector_cost_usd": 4.658965,
+      "total_cost_usd": 4.715671,
+      "wall_clock_seconds": 0.0,
+      "dod_passed": true,
+      "contract_passed": true,
+      "contract_tests_passed": 59,
+      "contract_tests_total": 59,
+      "effector_retries": 0,
+      "first_pass_contract_success": true,
+      "craft_items_retrieved": [],
+      "craft_items_reused": [],
+      "human_interventions": 0,
+      "security_events": [],
+      "trace_id": "tr_runB_orders"
+    },
+    {
+      "position": 4,
+      "task_id": "bookmarks",
+      "tier": "easy",
+      "model_cost_usd": 0.026901,
+      "effector_cost_usd": 2.27594,
+      "total_cost_usd": 2.302841,
+      "wall_clock_seconds": 0.0,
+      "dod_passed": true,
+      "contract_passed": true,
+      "contract_tests_passed": 15,
+      "contract_tests_total": 15,
+      "effector_retries": 0,
+      "first_pass_contract_success": true,
+      "craft_items_retrieved": [],
+      "craft_items_reused": [],
+      "human_interventions": 0,
+      "security_events": [],
+      "trace_id": "tr_runB_bookmarks"
+    }
+  ],
+  "aggregate": {
+    "warmup_tasks": 5,
+    "cost_slope_after_warmup": 0.0,
+    "cost_slope_ci": [
+      0.0,
+      0.0
+    ],
+    "min_detectable_slope": 0.0,
+    "control_run_present": false,
+    "treatment_vs_control_delta": 0.0,
+    "quality_holds": true,
+    "reuse_is_real": false,
+    "security_controls_held": true,
+    "note": "RECONSTRUCTED from workdir traces (Run B control: 4/30 (partial)). The git-tracked incremental ledger was rewound by a Conductor checkpoint/restore (it had been committed mid-run); the gitignored .context workdir retained the real per-task traces. Spend + contract + reuse are authoritative."
+  },
+  "decision": {
+    "status": "stopped",
+    "rationale": "Run B control: 4/30 (partial). Reconstructed from durable traces after a checkpoint rewound the committed ledger. NOT a pass/stop decision \u2014 that is T-1.4 over Run A + the completed control Run B.",
+    "residual_risks": [
+      "Run B incomplete (4/30) \u2014 finish before T-1.4.",
+      "Ledger/results were reconstructed post-hoc from traces, not the live incremental ledger."
+    ]
+  }
+}
