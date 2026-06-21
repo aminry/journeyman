@@ -405,21 +405,41 @@ def _append_record(records_path: Path | None, record: dict) -> None:
 
 
 def _load_prior_records(records_path: Path | None) -> list[dict]:
+    """Read the durable ledger, tolerating a torn final line (a crash mid-write) by skipping
+    unparseable lines, and de-duplicating by position (keep the last record for a position) so
+    an accidental re-append never double-counts. Order follows first appearance."""
     if records_path is None or not records_path.exists():
         return []
-    return [json.loads(ln) for ln in records_path.read_text().splitlines() if ln.strip()]
+    by_pos: dict[int, dict] = {}
+    order: list[int] = []
+    for ln in records_path.read_text().splitlines():
+        ln = ln.strip()
+        if not ln:
+            continue
+        try:
+            rec = json.loads(ln)
+        except json.JSONDecodeError:
+            continue  # torn/partial line from a crash mid-write — skip it, keep the rest
+        pos = rec["position"]
+        if pos not in by_pos:
+            order.append(pos)
+        by_pos[pos] = rec
+    return [by_pos[p] for p in order]
 
 
-def _excluded_record(task: TaskInfo, *, reason: str, cost_usd: float) -> dict:
-    """A per-task record for an INFRASTRUCTURE failure (transient/credential) — marked
-    excluded_from_slope so T-1.4 never counts it as a real first-pass/contract failure
-    (ADR-0017: exclude only infra failures unrelated to the agent)."""
+def _excluded_record(
+    task: TaskInfo, *, reason: str, cost_usd: float, kind: str = "transient"
+) -> dict:
+    """A per-task record for an INFRASTRUCTURE/unexpected failure — marked excluded_from_slope
+    so T-1.4 never counts it as a real first-pass/contract failure (ADR-0017: exclude only
+    failures unrelated to the agent). ``kind`` is 'transient' (gateway/credential) or 'error'
+    (an unexpected exception we caught so one task can't crash a 10h run)."""
     return build_task_record(
         position=task.position,
         task_id=task.id,
         tier=task.tier,
         model_cost_usd=0.0,
-        effector_cost_usd=cost_usd,
+        effector_cost_usd=round(cost_usd, 6),
         tool_cost_usd=0.0,
         wall_clock_seconds=0.0,
         dod_passed=False,
@@ -431,7 +451,7 @@ def _excluded_record(task: TaskInfo, *, reason: str, cost_usd: float) -> dict:
         craft_reused=[],
         trace_id=f"tr_excluded_{task.id}",
         excluded_from_slope=True,
-        exclusion_reason=f"infrastructure (transient): {reason}",
+        exclusion_reason=f"infrastructure ({kind}): {reason}",
     )
 
 
@@ -449,19 +469,74 @@ def run_sequence(
 ) -> OrchestratorResult:
     if run_mode not in (TREATMENT, CONTROL):
         raise ValueError(f"run_mode must be {TREATMENT!r} or {CONTROL!r}, got {run_mode!r}")
+    # Fresh run must not append to an existing ledger (that would duplicate positions + double
+    # count spend on a later resume). Require --resume, or a fresh path/run_id.
+    if not resume and records_path is not None and _load_prior_records(records_path):
+        raise ValueError(
+            f"{records_path} already has records — refusing to append (would duplicate positions). "
+            "Pass resume=True to continue this run, or use a fresh path/run_id."
+        )
     by_pos = {t.position: t for t in load_taskset(taskset_path)}
     started_at = _now()
-    baseline = RunningBaseline()
 
-    # Resume: skip positions already in the durable ledger; carry their spend + records.
+    # Resume: skip positions already in the durable ledger; carry their spend + records, and
+    # REBUILD the baseline from prior (non-excluded) records so quarantine decisions match an
+    # uninterrupted run (craft metrics are persisted on disk; the baseline must be too).
     prior_records = _load_prior_records(records_path) if resume else []
     done_positions = {r["position"] for r in prior_records}
     spent = sum(r["total_cost_usd"] for r in prior_records)
+    baseline = RunningBaseline()
+    for r in prior_records:
+        if not r.get("excluded_from_slope"):
+            baseline.update(
+                first_pass=r["first_pass_contract_success"], effector_retries=r["effector_retries"]
+            )
 
     tasks: list[TaskArtifacts] = []
-    extra_records: list[dict] = []  # excluded (infra) records, not tied to a TaskArtifacts
+    extra_records: list[dict] = []  # excluded records, not tied to a TaskArtifacts
     stop_reason: str | None = None
     consecutive_infra = 0
+
+    # In-flight marker: written before each task, cleared after its record is durable. On
+    # resume, a position with a live marker but no record crashed mid-task — its craft may be
+    # half-mutated, so we record it EXCLUDED and do NOT re-run it (closing the craft
+    # double-mutation window the audit flagged). It can be re-run later by clearing the record.
+    inflight_path = records_path.with_suffix(".inflight") if records_path is not None else None
+    if resume and inflight_path is not None and inflight_path.exists():
+        crashed = inflight_path.read_text().strip()
+        if crashed.isdigit() and int(crashed) not in done_positions and int(crashed) in by_pos:
+            rec = _excluded_record(
+                by_pos[int(crashed)],
+                reason="crashed mid-task before its record was durable; not re-run (craft may be "
+                "partially mutated)",
+                cost_usd=0.0,
+                kind="error",
+            )
+            _append_record(records_path, rec)
+            prior_records.append(rec)
+            done_positions.add(int(crashed))
+            spent += rec["total_cost_usd"]
+        inflight_path.unlink()
+
+    def _mark_inflight(pos: int) -> None:
+        if inflight_path is None:
+            return
+        inflight_path.parent.mkdir(parents=True, exist_ok=True)
+        inflight_path.write_text(str(pos))
+
+    def _clear_inflight() -> None:
+        if inflight_path is not None and inflight_path.exists():
+            inflight_path.unlink()
+
+    def _exclude(pos: int, *, reason: str, cost_usd: float, kind: str) -> bool:
+        """Record an excluded task; return True if the run should stop (K consecutive)."""
+        nonlocal spent, consecutive_infra
+        rec = _excluded_record(by_pos[pos], reason=reason, cost_usd=cost_usd, kind=kind)
+        _append_record(records_path, rec)
+        extra_records.append(rec)
+        spent += rec["total_cost_usd"]
+        consecutive_infra += 1
+        return consecutive_infra >= max_consecutive_infra_failures
 
     for pos in positions:
         if pos in done_positions:
@@ -471,28 +546,32 @@ def run_sequence(
                 f"global budget cap ${global_budget_cap_usd:.2f} reached (spent ${spent:.2f})"
             )
             break
+        _mark_inflight(pos)
         try:
             art = run_one_task(
                 inputs=inputs, task=by_pos[pos], run_mode=run_mode, run_id=run_id, baseline=baseline
             )
         except TransientInfraError as exc:
-            # compose/effector hit a persistent transient -> EXCLUDE the task (infra), don't
-            # record a false failure; stop if the credential/gateway is down for K in a row.
-            rec = _excluded_record(by_pos[pos], reason=str(exc), cost_usd=exc.cost_usd)
-            _append_record(records_path, rec)
-            extra_records.append(rec)
-            spent += rec["total_cost_usd"]
-            consecutive_infra += 1
-            if consecutive_infra >= max_consecutive_infra_failures:
-                stop_reason = (
-                    f"{consecutive_infra} consecutive infrastructure failures "
-                    f"(gateway/credential down): {exc}"
-                )
+            _clear_inflight()
+            # Persistent transient (gateway/credential) -> EXCLUDE (infra), not a false failure;
+            # stop if it is down for K in a row.
+            if _exclude(pos, reason=str(exc), cost_usd=exc.cost_usd, kind="transient"):
+                stop_reason = f"{consecutive_infra} consecutive infrastructure failures: {exc}"
+                break
+            continue
+        except Exception as exc:  # noqa: BLE001 - never let ONE task crash a 10h unattended run
+            # An unexpected (non-transient) error is caught + excluded so the run survives; it
+            # is flagged for T-1.4 and counts toward the consecutive-failure stop (a real bug
+            # that recurs will halt the run rather than burn the budget).
+            _clear_inflight()
+            if _exclude(pos, reason=f"{type(exc).__name__}: {exc}", cost_usd=0.0, kind="error"):
+                stop_reason = f"{consecutive_infra} consecutive task errors: {exc}"
                 break
             continue
         consecutive_infra = 0
         tasks.append(art)
         _append_record(records_path, art.record)
+        _clear_inflight()
         spent += art.record["total_cost_usd"]
         if global_budget_cap_usd is not None and spent >= global_budget_cap_usd:
             stop_reason = (
@@ -512,19 +591,37 @@ def run_sequence(
     diag_summary["resumed_prior_tasks"] = len(prior_records)
     diag_summary["excluded_infra_tasks"] = sum(1 for r in records if r.get("excluded_from_slope"))
     diag_summary["total_spend_usd"] = round(spent, 4)
+    # structured stop signal for an unattended monitor (not just free-text rationale)
+    diag_summary["stopped_early"] = stop_reason is not None
+    diag_summary["stop_reason"] = stop_reason
 
-    results_doc = build_results(
-        run_id=run_id,
-        run_kind="experiment",
-        started_at=started_at,
-        completed_at=completed_at,
-        pins=inputs.config.to_pins(),
-        tasks=records,
-        aggregate=_aggregate(records, run_mode, diag_summary),
-        decision=_pilot_decision(records, run_mode, stop_reason=stop_reason),
-        protocol_version=inputs.config.protocol_version,
-    )
-    validate_results(results_doc)
+    if records:
+        results_doc = build_results(
+            run_id=run_id,
+            run_kind="experiment",
+            started_at=started_at,
+            completed_at=completed_at,
+            pins=inputs.config.to_pins(),
+            tasks=records,
+            aggregate=_aggregate(records, run_mode, diag_summary),
+            decision=_pilot_decision(records, run_mode, stop_reason=stop_reason),
+            protocol_version=inputs.config.protocol_version,
+        )
+        validate_results(results_doc)
+    else:
+        # Degenerate: nothing ran (e.g. resumed with the budget already exhausted). Don't
+        # crash on the schema's tasks>=1 — emit an explicit, unvalidated zero-task stop doc.
+        results_doc = {
+            "protocol_version": inputs.config.protocol_version,
+            "run_id": run_id,
+            "run_kind": "experiment",
+            "started_at": started_at,
+            "completed_at": completed_at,
+            "pins": inputs.config.to_pins(),
+            "tasks": [],
+            "aggregate": _aggregate([], run_mode, diag_summary),
+            "decision": _pilot_decision([], run_mode, stop_reason=stop_reason or "no tasks ran"),
+        }
 
     return OrchestratorResult(
         run_id=run_id,
@@ -540,8 +637,11 @@ def run_sequence(
 
 
 def _aggregate(records: list[dict], run_mode: str, diag_summary: dict) -> dict:
-    quality = all(r["contract_passed"] and r["dod_passed"] for r in records)
-    reuse = any(r["craft_items_reused"] for r in records)
+    # Quality/reuse are computed over SCORED tasks only — excluded (infra/error) records must
+    # not drag quality_holds down or be read as real outcomes.
+    scored = [r for r in records if not r.get("excluded_from_slope")]
+    quality = all(r["contract_passed"] and r["dod_passed"] for r in scored)
+    reuse = any(r["craft_items_reused"] for r in scored)
     security_ok = all(not r.get("security_events") for r in records)
     return {
         "warmup_tasks": 5,

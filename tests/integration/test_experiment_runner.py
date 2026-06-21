@@ -104,6 +104,35 @@ def test_run_experiment_control_cannot_read_treatment_craft(tmp_path: Path) -> N
     assert (tmp_path / "out" / "runB.results.json").exists()
 
 
+def test_global_budget_cap_spans_both_arms(tmp_path: Path) -> None:
+    """The cap is for the whole experiment: heavy spend in Run A leaves Run B the remainder,
+    so the combined A+B spend cannot run away past the cap (review flagged this as unproven)."""
+    cfg = orchestrator_run_config()
+
+    def effector_factory(arm: str) -> FakeEffector:
+        return FakeEffector(cfg, artifact_dir=tmp_path / f"run{arm}" / "eff")
+
+    # FakeEffector ~$0.525/task. Cap $2.00: Run A (3 tasks ~$1.6) leaves B only ~$0.4 -> B is
+    # cut short, proving the cap is shared across arms rather than per-arm.
+    res_a, res_b = run_experiment(
+        positions=[1, 2, 3],
+        cfg=cfg,
+        embedder=DeterministicHashEmbedder(dim=256),
+        gold=GOLD,
+        workdir=tmp_path / "wd",
+        craft_dir_a=tmp_path / "craft_A",
+        craft_dir_b=tmp_path / "craft_B",
+        out_dir=tmp_path / "out",
+        driver_factory=_driver,
+        effector_factory=effector_factory,
+        global_budget_cap_usd=2.00,
+    )
+    a_spend = res_a.diagnostic_summary["total_spend_usd"]
+    b_spend = res_b.diagnostic_summary["total_spend_usd"]
+    assert len(res_b.records) < 3  # B was cut short by the shared cap
+    assert a_spend + b_spend <= 2.00 + 0.60  # bounded by cap + at most one task's overshoot
+
+
 def test_non_empty_control_craft_dir_is_rejected(tmp_path: Path) -> None:
     cfg = orchestrator_run_config()
     # pre-seed B's dir so it's non-empty -> frozen-empty control violated

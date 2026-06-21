@@ -337,10 +337,14 @@ class ClaudeCodeEffector:
                 if attempt < self.max_retries:
                     self._sleep(self.backoff_base**attempt)
                     continue
+                # Capture any real spend the failed attempts already incurred (the CLI reports
+                # total_cost_usd even on an error) so the global budget cap doesn't under-count.
+                spent = parse_cli_result(obj, self.config).cost_usd
                 raise TransientEffectorError(
                     f"effector hit a transient API/infra error after {self.max_retries} retries: "
                     f"{str(obj.get('result') or obj.get('stderr') or stderr)[:160]}",
                     stage="effector",
+                    cost_usd=spent,
                 )
             break  # a non-transient result (real success or a real build failure) -> evaluate it
         parsed = parse_cli_result(obj, self.config)

@@ -13,6 +13,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from harness.craft import CraftLibrary
 from harness.driver import FakeDriver
 from harness.effector import FakeEffector
@@ -72,6 +74,7 @@ def test_kill_then_resume_skips_completed_no_remutation_no_respend(tmp_path: Pat
     lib_after_2 = CraftLibrary(craft)
     snapshot = {cid: lib_after_2.read(cid).version for cid in lib_after_2.ids()}
     craft_bodies = {cid: lib_after_2.read(cid).body for cid in lib_after_2.ids()}
+    craft_metrics = {cid: lib_after_2.read(cid).metrics for cid in lib_after_2.ids()}
 
     # Resume over 1-3: positions 1,2 must be SKIPPED (no re-run), only 3 executes.
     r2 = _inputs(tmp_path / "wd2", craft)  # same craft dir (persisted), new workdir
@@ -83,11 +86,57 @@ def test_kill_then_resume_skips_completed_no_remutation_no_respend(tmp_path: Pat
     # the durable ledger now has all 3, and the final results doc covers all 3
     assert records.read_text().count("\n") == 3
     assert {r["position"] for r in res.records} == {1, 2, 3}
-    # NO craft re-mutation: the items written by tasks 1-2 are byte-identical (not bumped/rewritten)
+    # NO craft re-mutation FROM RE-RUNNING tasks 1-2: their items are byte-identical (version
+    # + body not re-written). (Their `metrics` MAY change if task 3 legitimately REUSES them —
+    # that is correct behavior, not a re-run; the crashed-inflight test covers the re-fold case.)
     lib_final = CraftLibrary(craft)
     for cid, ver in snapshot.items():
         assert lib_final.read(cid).version == ver
         assert lib_final.read(cid).body == craft_bodies[cid]
+    _ = craft_metrics  # snapshot kept for clarity; not asserted (see note above)
+
+
+def test_resume_survives_a_torn_last_line_in_the_ledger(tmp_path: Path) -> None:
+    records = tmp_path / "r.records.jsonl"
+    inp = _inputs(tmp_path / "wd1", tmp_path / "craft")
+    run_sequence([1, 2], run_mode="treatment", inputs=inp, run_id="r", records_path=records)
+    # simulate a crash mid-write: append a torn (unterminated) JSON line
+    with records.open("a") as fh:
+        fh.write('{"position": 3, "total_cost')
+    inp2 = _inputs(tmp_path / "wd2", tmp_path / "craft")
+    res = run_sequence(
+        [1, 2, 3], run_mode="treatment", inputs=inp2, run_id="r", records_path=records, resume=True
+    )
+    # the torn line is skipped, positions 1-2 still recognized as done, only 3 runs
+    assert len(res.tasks) == 1 and res.tasks[0].record["position"] == 3
+    assert {r["position"] for r in res.records} == {1, 2, 3}
+
+
+def test_fresh_run_refuses_to_append_to_existing_ledger(tmp_path: Path) -> None:
+    records = tmp_path / "r.records.jsonl"
+    inp = _inputs(tmp_path / "wd1", tmp_path / "craft")
+    run_sequence([1], run_mode="treatment", inputs=inp, run_id="r", records_path=records)
+    inp2 = _inputs(tmp_path / "wd2", tmp_path / "craft2")
+    with pytest.raises(ValueError, match="already has records"):
+        run_sequence([2], run_mode="treatment", inputs=inp2, run_id="r", records_path=records)
+
+
+def test_resume_excludes_a_crashed_inflight_task_without_rerun(tmp_path: Path) -> None:
+    records = tmp_path / "r.records.jsonl"
+    craft = tmp_path / "craft"
+    inp = _inputs(tmp_path / "wd1", craft)
+    run_sequence([1], run_mode="treatment", inputs=inp, run_id="r", records_path=records)
+    # simulate a hard kill mid-task at position 2: a live inflight marker, no record for 2
+    records.with_suffix(".inflight").write_text("2")
+    inp2 = _inputs(tmp_path / "wd2", craft)
+    res = run_sequence(
+        [1, 2, 3], run_mode="treatment", inputs=inp2, run_id="r", records_path=records, resume=True
+    )
+    by_id = {r["position"]: r for r in res.records}
+    assert by_id[2]["excluded_from_slope"] is True  # crashed task excluded, NOT re-run
+    assert "mid-task" in by_id[2]["exclusion_reason"]
+    assert 3 in by_id  # the run continued past the crashed task
+    assert not records.with_suffix(".inflight").exists()  # marker cleared
 
 
 # --- #2 global budget cap -------------------------------------------------- #

@@ -11,18 +11,25 @@ exclusion: "exclude only infrastructure failures unrelated to the agent").
 
 from __future__ import annotations
 
-# Substrings that mark a transient/infra failure in an API error or CLI result (gateway
-# rate limits, overload, the 502 token-refresh seen in the pilot, timeouts, connection
-# resets). Shared by the driver's exception classifier and the effector's CLI-result check.
+# Substrings that mark a transient/infra failure in an API error or CLI result: gateway
+# rate limits, overload, 5xx, the 502 token-refresh seen in the pilot, and credential
+# expiry. Deliberately SPECIFIC (HTTP codes + distinctive phrases) — bare "timeout"/
+# "connection" are omitted because a real build's output can contain them, which would
+# wrongly EXCLUDE a genuine failure; true SDK timeouts/connection resets are caught by the
+# driver's exception-type names and the effector's subprocess.TimeoutExpired handler.
 TRANSIENT_MARKERS = (
     "rate_limit",
     "overloaded",
     "429",
-    "529",
+    "500",
     "502",
+    "503",
+    "504",
+    "529",
     "token refresh",
-    "timeout",
-    "connection",
+    "service unavailable",
+    "unauthorized",
+    "invalid_api_key",
 )
 
 

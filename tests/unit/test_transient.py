@@ -48,6 +48,20 @@ def test_is_transient_cli_result_ignores_a_real_build_result() -> None:
     assert is_transient_cli_result(obj, 0, "") is False
 
 
+def test_is_transient_cli_result_does_not_misclassify_a_real_build_failure() -> None:
+    """False-positive guard (review finding): a genuine build failure that merely MENTIONS
+    'timeout'/'connection' must NOT be excluded as transient — it's a real failure."""
+    obj = {"is_error": True, "result": "test failed: requests.get timeout on the wrong port"}
+    assert is_transient_cli_result(obj, 1, "") is False  # bare 'timeout' is not a transient marker
+    obj2 = {"is_error": True, "result": "ConnectionRefused to the app's own db"}
+    assert is_transient_cli_result(obj2, 1, "") is False
+
+
+def test_is_transient_cli_result_flags_gateway_5xx_and_credential() -> None:
+    for txt in ("503 service unavailable", "500 internal", "unauthorized", "invalid_api_key"):
+        assert is_transient_cli_result({"is_error": True, "result": txt}, 1, "") is True
+
+
 # --- effector retry + exclusion -------------------------------------------- #
 def test_effector_retries_transient_then_recovers(tmp_path: Path) -> None:
     subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
