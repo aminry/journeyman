@@ -522,7 +522,10 @@ def run_sequence(
         if inflight_path is None:
             return
         inflight_path.parent.mkdir(parents=True, exist_ok=True)
-        inflight_path.write_text(str(pos))
+        with inflight_path.open("w") as fh:
+            fh.write(str(pos))
+            fh.flush()
+            os.fsync(fh.fileno())  # durable before the task mutates craft (hard-kill safety)
 
     def _clear_inflight() -> None:
         if inflight_path is not None and inflight_path.exists():

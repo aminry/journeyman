@@ -541,11 +541,13 @@ class AnthropicDriver:
 
 
 _RETRYABLE_EXC_NAMES = {
+    # Specific transient/infra exception types only. NOT the base APIStatusError — that
+    # covers 4xx client errors (400/401/403/422) which are real driver bugs, not infra, and
+    # must NOT be retried-then-excluded (that would mask a defect as an infra exclusion).
     "RateLimitError",
     "InternalServerError",
     "APIConnectionError",
     "APITimeoutError",
-    "APIStatusError",
     "OverloadedError",
 }
 

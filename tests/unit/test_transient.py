@@ -50,15 +50,24 @@ def test_is_transient_cli_result_ignores_a_real_build_result() -> None:
 
 def test_is_transient_cli_result_does_not_misclassify_a_real_build_failure() -> None:
     """False-positive guard (review finding): a genuine build failure that merely MENTIONS
-    'timeout'/'connection' must NOT be excluded as transient — it's a real failure."""
-    obj = {"is_error": True, "result": "test failed: requests.get timeout on the wrong port"}
-    assert is_transient_cli_result(obj, 1, "") is False  # bare 'timeout' is not a transient marker
-    obj2 = {"is_error": True, "result": "ConnectionRefused to the app's own db"}
-    assert is_transient_cli_result(obj2, 1, "") is False
+    'timeout'/'connection' OR a bare HTTP number must NOT be excluded as transient."""
+    for txt in (
+        "test failed: requests.get timeout on the wrong port",
+        "ConnectionRefused to the app's own db",
+        "assert resp.status_code == 500  # the handler returned 500",  # bare 500, real failure
+        "p99 latency was 502ms, over budget",  # bare 502 in build output
+    ):
+        assert is_transient_cli_result({"is_error": True, "result": txt}, 1, "") is False
 
 
 def test_is_transient_cli_result_flags_gateway_5xx_and_credential() -> None:
-    for txt in ("503 service unavailable", "500 internal", "unauthorized", "invalid_api_key"):
+    for txt in (
+        "Error code: 503 - service unavailable",
+        "502 Bad Gateway",
+        "500 Internal Server Error from the API",
+        "unauthorized",
+        "invalid_api_key",
+    ):
         assert is_transient_cli_result({"is_error": True, "result": txt}, 1, "") is True
 
 

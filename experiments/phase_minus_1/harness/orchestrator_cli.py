@@ -137,7 +137,7 @@ def _summary_md(result: OrchestratorResult) -> str:
         "retrieved | reused |",
         "|--|--|--|--|--|--|--|--|--|--|",
     ]
-    for r, a in zip(result.records, result.tasks):
+    for r in result.records:  # iterate records (resume/excluded-safe); not zip with tasks
         lines.append(
             f"| {r['position']} | {r['task_id']} | {r['tier']} | {r['model_cost_usd']:.4f} | "
             f"{r['effector_cost_usd']:.4f} | {r['total_cost_usd']:.4f} | {r['effector_retries']} | "

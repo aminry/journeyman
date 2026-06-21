@@ -11,23 +11,24 @@ exclusion: "exclude only infrastructure failures unrelated to the agent").
 
 from __future__ import annotations
 
-# Substrings that mark a transient/infra failure in an API error or CLI result: gateway
-# rate limits, overload, 5xx, the 502 token-refresh seen in the pilot, and credential
-# expiry. Deliberately SPECIFIC (HTTP codes + distinctive phrases) — bare "timeout"/
-# "connection" are omitted because a real build's output can contain them, which would
-# wrongly EXCLUDE a genuine failure; true SDK timeouts/connection resets are caught by the
-# driver's exception-type names and the effector's subprocess.TimeoutExpired handler.
+# Distinctive PHRASES that mark a transient/infra failure in an API error or CLI result:
+# gateway rate limits, overload, 5xx, the 502 token-refresh seen in the pilot, and
+# credential expiry. Deliberately phrase-based, NOT bare HTTP numbers: a bare "500"/"502"
+# would false-match a real build's output ("500ms", "status 500"), wrongly EXCLUDING a
+# genuine failure and corrupting the primary signal. The Anthropic-specific 429/529 are
+# kept (they don't occur coincidentally in CRUD build output). True SDK timeouts/connection
+# resets and generic 5xx are caught by the driver's typed exception NAMES + the effector's
+# subprocess.TimeoutExpired handler — not by substring.
 TRANSIENT_MARKERS = (
     "rate_limit",
     "overloaded",
     "429",
-    "500",
-    "502",
-    "503",
-    "504",
     "529",
     "token refresh",
+    "internal server error",
+    "bad gateway",
     "service unavailable",
+    "gateway timeout",
     "unauthorized",
     "invalid_api_key",
 )
