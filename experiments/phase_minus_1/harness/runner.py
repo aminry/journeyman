@@ -24,6 +24,7 @@ import json
 import os
 import socket
 import subprocess
+import sys
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -139,17 +140,48 @@ class DodResult:
     detail: str = ""
 
 
+def _gate_python(repo_dir: Path) -> str:
+    """Interpreter the instance's own DoD tests must run under.
+
+    Mirror the booted service's environment: if the repo provisioned a project venv
+    (its ``run.sh`` does for any stack with third-party deps), run the gate *inside*
+    it so the gate sees exactly the dependencies the service did. Otherwise fall back
+    to the harness interpreter — never a bare ``python`` resolved off PATH.
+
+    Running the gate under the *ambient* interpreter rather than the project venv was
+    a real harness bug (T-1.4 root cause): dependency-complete repos whose service
+    booted and passed the contract suite still failed DoD because the gate's bare
+    ``python`` lacked their venv-only deps (e.g. SQLAlchemy), turning a clean run into
+    a spurious ``ModuleNotFoundError`` collection failure. The contract suite was
+    unaffected only because it boots via ``run.sh`` (the venv); the gate must too.
+    """
+    base = repo_dir.resolve()  # absolute: the gate runs with cwd=repo_dir, so a
+    # relative interpreter path would resolve against the wrong directory.
+    for rel in ("bin/python", "Scripts/python.exe"):  # POSIX, then Windows
+        cand = base / ".venv" / rel
+        if cand.exists():
+            # Return the launcher's own path WITHOUT following the symlink: Python
+            # derives the venv's site-packages from the launcher location (adjacent
+            # ``pyvenv.cfg``), so resolving ``bin/python`` to the base interpreter
+            # would silently defeat the venv and drop its deps (e.g. SQLAlchemy).
+            return str(cand)
+    return sys.executable or "python"
+
+
 def run_instance_dod(repo_dir: Path) -> DodResult:
     """Run the instance's OWN tests (the wired, in-scope gate for the spine).
 
     The full typed-gate DoD (lint/build/coverage/security/code-graph for the
     instance) is Phase-0 (T0.7); the spine records ``dod_passed`` from the
     instance's unit tests, which is the load-bearing acceptance signal here.
+
+    The tests run under the repo's project venv when present (see ``_gate_python``)
+    so the gate environment matches the service the contract suite just exercised.
     """
     if not (repo_dir / "tests").exists():
         return DodResult(False, {"tests": False}, "no tests/ in instance repo")
     proc = subprocess.run(
-        ["python", "-m", "pytest", "tests", "-q", "--rootdir", str(repo_dir)],
+        [_gate_python(repo_dir), "-m", "pytest", "tests", "-q", "--rootdir", str(repo_dir)],
         cwd=str(repo_dir),
         capture_output=True,
         text=True,
