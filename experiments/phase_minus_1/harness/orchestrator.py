@@ -29,6 +29,7 @@ Invariants (ADR-0020 §2/§6):
 from __future__ import annotations
 
 import json
+import os
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -39,7 +40,8 @@ import httpx
 from harness.compiler import SuiteResult, run_suite
 from harness.craft import CraftItem, CraftLibrary
 from harness.craftimpact import RunningBaseline, quarantine_harmful, update_craft_metrics
-from harness.driver import Driver, GateOutcome, verify_incorporated
+from harness.driver import Driver, GateOutcome, ReflectResult, verify_incorporated
+from harness.errors import TransientInfraError
 from harness.effector import Effector, EffectorTask, drive_coding_effector
 from harness.gold import GoldMap, RetrievalDiagnostic, retrieval_diagnostic, summarize_diagnostics
 from harness.render import write_pytest_module
@@ -267,14 +269,29 @@ def run_one_task(
     )
 
     # --- E. reflect (ALWAYS runs -> driver-cost parity) -------------------- #
-    reflect = inputs.driver.reflect(
-        spec=spec,
-        feature_tags=task.feature_tags,
-        retrieved=retrieved_items,
-        incorporated=reused_ids,
-        gate=gate,
-        library=inputs.library,
-    )
+    # A transient/infra error in reflect must NOT lose the task: the gate already ran, so
+    # the task's result + cost are valid — record them, just skip reflection this task.
+    # (A transient in compose/effector, above, has no valid result and propagates to the
+    # orchestrator, which excludes the task.)
+    try:
+        reflect = inputs.driver.reflect(
+            spec=spec,
+            feature_tags=task.feature_tags,
+            retrieved=retrieved_items,
+            incorporated=reused_ids,
+            gate=gate,
+            library=inputs.library,
+        )
+    except TransientInfraError as exc:
+        reflect = ReflectResult(
+            "SKIP",
+            None,
+            None,
+            0,
+            0,
+            cfg.driver_model or "unknown",
+            f"reflection skipped (transient infra error, task result retained): {exc}",
+        )
     craft_written: str | None = None
     if run_mode == TREATMENT and reflect.action in ("WRITE", "UPDATE") and reflect.craft_item:
         leaks = project_strip_lint(reflect.craft_item.body, spec)
@@ -375,6 +392,49 @@ def run_one_task(
 # --------------------------------------------------------------------------- #
 # A run over a sequence of positions
 # --------------------------------------------------------------------------- #
+def _append_record(records_path: Path | None, record: dict) -> None:
+    """Append one per-task record as a JSON line (fsync) — a durable, tail-able ledger so a
+    crash loses at most the in-flight task and ``--resume`` can skip what completed."""
+    if records_path is None:
+        return
+    records_path.parent.mkdir(parents=True, exist_ok=True)
+    with records_path.open("a") as fh:
+        fh.write(json.dumps(record) + "\n")
+        fh.flush()
+        os.fsync(fh.fileno())
+
+
+def _load_prior_records(records_path: Path | None) -> list[dict]:
+    if records_path is None or not records_path.exists():
+        return []
+    return [json.loads(ln) for ln in records_path.read_text().splitlines() if ln.strip()]
+
+
+def _excluded_record(task: TaskInfo, *, reason: str, cost_usd: float) -> dict:
+    """A per-task record for an INFRASTRUCTURE failure (transient/credential) — marked
+    excluded_from_slope so T-1.4 never counts it as a real first-pass/contract failure
+    (ADR-0017: exclude only infra failures unrelated to the agent)."""
+    return build_task_record(
+        position=task.position,
+        task_id=task.id,
+        tier=task.tier,
+        model_cost_usd=0.0,
+        effector_cost_usd=cost_usd,
+        tool_cost_usd=0.0,
+        wall_clock_seconds=0.0,
+        dod_passed=False,
+        contract_tests_passed=0,
+        contract_tests_total=1,
+        effector_retries=0,
+        first_pass_contract_success=False,
+        craft_retrieved=[],
+        craft_reused=[],
+        trace_id=f"tr_excluded_{task.id}",
+        excluded_from_slope=True,
+        exclusion_reason=f"infrastructure (transient): {reason}",
+    )
+
+
 def run_sequence(
     positions: list[int],
     *,
@@ -382,29 +442,76 @@ def run_sequence(
     inputs: RunInputs,
     run_id: str,
     taskset_path: str | Path = DEFAULT_TASKSET,
+    records_path: Path | None = None,
+    resume: bool = False,
+    global_budget_cap_usd: float | None = None,
+    max_consecutive_infra_failures: int = 3,
 ) -> OrchestratorResult:
     if run_mode not in (TREATMENT, CONTROL):
         raise ValueError(f"run_mode must be {TREATMENT!r} or {CONTROL!r}, got {run_mode!r}")
     by_pos = {t.position: t for t in load_taskset(taskset_path)}
     started_at = _now()
     baseline = RunningBaseline()
+
+    # Resume: skip positions already in the durable ledger; carry their spend + records.
+    prior_records = _load_prior_records(records_path) if resume else []
+    done_positions = {r["position"] for r in prior_records}
+    spent = sum(r["total_cost_usd"] for r in prior_records)
+
     tasks: list[TaskArtifacts] = []
+    extra_records: list[dict] = []  # excluded (infra) records, not tied to a TaskArtifacts
+    stop_reason: str | None = None
+    consecutive_infra = 0
+
     for pos in positions:
-        tasks.append(
-            run_one_task(
+        if pos in done_positions:
+            continue  # already completed in a prior run (resume) — never re-run / re-spend
+        if global_budget_cap_usd is not None and spent >= global_budget_cap_usd:
+            stop_reason = (
+                f"global budget cap ${global_budget_cap_usd:.2f} reached (spent ${spent:.2f})"
+            )
+            break
+        try:
+            art = run_one_task(
                 inputs=inputs, task=by_pos[pos], run_mode=run_mode, run_id=run_id, baseline=baseline
             )
-        )
+        except TransientInfraError as exc:
+            # compose/effector hit a persistent transient -> EXCLUDE the task (infra), don't
+            # record a false failure; stop if the credential/gateway is down for K in a row.
+            rec = _excluded_record(by_pos[pos], reason=str(exc), cost_usd=exc.cost_usd)
+            _append_record(records_path, rec)
+            extra_records.append(rec)
+            spent += rec["total_cost_usd"]
+            consecutive_infra += 1
+            if consecutive_infra >= max_consecutive_infra_failures:
+                stop_reason = (
+                    f"{consecutive_infra} consecutive infrastructure failures "
+                    f"(gateway/credential down): {exc}"
+                )
+                break
+            continue
+        consecutive_infra = 0
+        tasks.append(art)
+        _append_record(records_path, art.record)
+        spent += art.record["total_cost_usd"]
+        if global_budget_cap_usd is not None and spent >= global_budget_cap_usd:
+            stop_reason = (
+                f"global budget cap ${global_budget_cap_usd:.2f} reached after task "
+                f"{pos} (spent ${spent:.2f})"
+            )
+            break
     completed_at = _now()
 
-    records = [a.record for a in tasks]
+    new_records = [a.record for a in tasks] + extra_records
+    records = prior_records + new_records
     diagnostics = [a.diagnostic for a in tasks]
     diag_summary = summarize_diagnostics(diagnostics)
-    # run-health (G1 condition 4): the worst per-task %-canonical (always 1.0 unless a
-    # drift slipped past assert_craft_canonical, which would already have raised).
     diag_summary["craft_canonical_pct_min"] = min(
         (a.craft_canonical_pct for a in tasks), default=1.0
     )
+    diag_summary["resumed_prior_tasks"] = len(prior_records)
+    diag_summary["excluded_infra_tasks"] = sum(1 for r in records if r.get("excluded_from_slope"))
+    diag_summary["total_spend_usd"] = round(spent, 4)
 
     results_doc = build_results(
         run_id=run_id,
@@ -414,7 +521,7 @@ def run_sequence(
         pins=inputs.config.to_pins(),
         tasks=records,
         aggregate=_aggregate(records, run_mode, diag_summary),
-        decision=_pilot_decision(records, run_mode),
+        decision=_pilot_decision(records, run_mode, stop_reason=stop_reason),
         protocol_version=inputs.config.protocol_version,
     )
     validate_results(results_doc)
@@ -458,18 +565,20 @@ def _aggregate(records: list[dict], run_mode: str, diag_summary: dict) -> dict:
     }
 
 
-def _pilot_decision(records: list[dict], run_mode: str) -> dict:
+def _pilot_decision(records: list[dict], run_mode: str, *, stop_reason: str | None = None) -> dict:
+    rationale = (
+        f"Single-arm run (run_mode={run_mode}), {len(records)} task(s). This harness emits "
+        "DATA ONLY — it never writes a pass/stop experimental decision; the treatment-vs-"
+        "control delta + the pre-registered test are computed in T-1.4 (ADR-0017). "
+    )
+    if stop_reason:
+        rationale += f"Run halted early by a runtime guard: {stop_reason}."
     return {
         "status": "stopped",
-        "rationale": (
-            f"PILOT/PARTIAL run (run_mode={run_mode}), stopped at the ADR-0020 G1 gate. "
-            f"{len(records)} task(s); not a full experimental decision (requires 30 tasks "
-            "+ the mandatory control run, ADR-0017/T-1.4). Reviewed for craft quality, "
-            "reuse, and retrieval precision before authorizing the full run."
-        ),
+        "rationale": rationale,
         "residual_risks": [
-            "Single arm, partial task set: no cost slope, no warm-up exclusion, no test.",
-            "Control delta (Run A vs Run B) is computed in T-1.4, not here.",
-            "Craft quality is judged at the G1 review, not asserted by the harness.",
+            "Data-only artifact: no pass/stop decision is made here (that is T-1.4).",
+            "Control delta (Run A vs Run B) + the slope test are computed in T-1.4.",
+            *([f"Early stop: {stop_reason}"] if stop_reason else []),
         ],
     }
